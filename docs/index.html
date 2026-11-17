@@ -83,6 +83,9 @@
   .tag { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; padding: 2px 7px; border-radius: 6px; }
   .tag.hot { background: var(--hot-dim); color: var(--hot); }
   .tag.new { background: var(--good-dim); color: var(--good); }
+  .tag.buy { background: var(--good); color: var(--bg); }
+  .card.buy { border-color: var(--good); box-shadow: inset 0 0 0 1px var(--good); }
+  .card.buy .price .amt { color: var(--good); }
   .dest { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
   .city { font-size: 21px; font-weight: 700; line-height: 1.15; }
   .country { color: var(--muted); font-size: 13px; }
@@ -156,7 +159,13 @@
         <select id="month"><option value="">Any</option></select>
       </div>
       <div class="field">Max <input type="number" id="maxPrice" min="0" step="250" placeholder="kr"></div>
-      <label class="toggle"><input type="checkbox" id="hotOnly"> 🔥 Hot only</label>
+      <div class="field">Show
+        <select id="level">
+          <option value="">All deals</option>
+          <option value="hot">🔥 Hot and up</option>
+          <option value="buy">💰 BUY BUY BUY only</option>
+        </select>
+      </div>
     </div>
     <div class="grid" id="grid"></div>
   </section>
@@ -167,12 +176,13 @@
         <h3>What counts as a deal</h3>
         <p id="ruleText"></p>
         <p><b>Hot</b> means both are true at once.</p>
+        <p id="buyText"></p>
         <p>Trips outside Europe are at least 12 days. Europe trips are 3–21 days and stay on their own tab. Layovers are allowed, up to <span id="maxStops">2</span> each way.</p>
       </div>
       <div class="box">
         <h3>Price limits by region</h3>
         <table>
-          <thead><tr><th>Region</th><th class="num">Limit</th><th class="num">Trip</th></tr></thead>
+          <thead><tr><th>Region</th><th class="num">Deal under</th><th class="num">BUY under</th><th class="num">Trip</th></tr></thead>
           <tbody id="regionRows"></tbody>
         </table>
       </div>
@@ -199,7 +209,7 @@
 
 <script>
 (() => {
-  const state = { data: null, tab: "world", region: "all", sort: "score", month: "", maxPrice: "", hotOnly: false };
+  const state = { data: null, tab: "world", region: "all", sort: "score", month: "", maxPrice: "", level: "" };
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const kr = (n) => n == null ? "–" : Math.round(n).toLocaleString("da-DK") + " kr";
@@ -221,7 +231,7 @@
     set(v) { try { localStorage.setItem("cphDealRadar", JSON.stringify(v)); } catch {} },
   };
   Object.assign(state, store.get());
-  const remember = () => store.set({ sort: state.sort, maxPrice: state.maxPrice, hotOnly: state.hotOnly });
+  const remember = () => store.set({ sort: state.sort, maxPrice: state.maxPrice, level: state.level });
 
   async function load() {
     try {
@@ -274,8 +284,9 @@
     const r = d.rules || {};
     $("ruleText").innerHTML = `A flight is a deal when it's at least <b>${Math.round((r.min_discount || 0.3) * 100)}% under the median price</b> for that destination in that month (median over the last ${r.median_window_days || 30} days of scans), <b>or</b> it's under the price limit for its region.`;
     $("maxStops").textContent = r.max_stops_each_way ?? 2;
+    $("buyText").innerHTML = `<b>BUY BUY BUY</b> means it's at least ${Math.round((r.buy_min_discount || 0.45) * 100)}% under the median, or at most ${Math.round((r.buy_max_share_of_limit || 0.6) * 100)}% of the region's price limit. Only these send phone alerts.`;
     $("regionRows").innerHTML = (d.regions || []).filter((g) => g.key !== "other").map((g) =>
-      `<tr><td>${esc(g.label)}</td><td class="num">${g.price_limit ? kr(g.price_limit) : "–"}</td><td class="num">${g.min_days}–${g.max_days} d</td></tr>`).join("");
+      `<tr><td>${esc(g.label)}</td><td class="num">${g.price_limit ? kr(g.price_limit) : "–"}</td><td class="num">${g.price_limit ? kr(g.price_limit * (r.buy_max_share_of_limit || 0.6)) : "–"}</td><td class="num">${g.min_days}–${g.max_days} d</td></tr>`).join("");
     const s = d.stats || {};
     $("statsText").textContent = s.offers_seen != null
       ? `Last scan: ${s.offers_seen.toLocaleString("da-DK")} prices checked across ${s.destinations_seen ?? "?"} destinations, ${s.api_calls ?? "?"} API calls.` : "";
@@ -307,13 +318,13 @@
     $("month").innerHTML = `<option value="">Any</option>` + months.map((m) => `<option value="${m}" ${m === state.month ? "selected" : ""}>${monthName(m)}</option>`).join("");
     $("sort").value = state.sort;
     $("maxPrice").value = state.maxPrice;
-    $("hotOnly").checked = !!state.hotOnly;
+    $("level").value = state.level || "";
 
     let list = inTab.filter((x) =>
       (state.region === "all" || state.tab === "europe" || x.region === state.region) &&
       (!state.month || x.depart.startsWith(state.month)) &&
       (!state.maxPrice || x.price <= Number(state.maxPrice)) &&
-      (!state.hotOnly || x.level === "hot"));
+      (!state.level || (state.level === "buy" ? x.level === "buy" : x.level !== "deal")));
     const sorters = {
       score: (a, b) => b.score - a.score || a.price - b.price,
       price: (a, b) => a.price - b.price,
@@ -339,9 +350,9 @@
     if (x.price_limit && x.price <= x.price_limit) pills.push(`<span class="pill">Under ${kr(x.price_limit)} limit</span>`);
     const meter = disc != null && disc > 0 ? `<div class="meter" title="${disc}% under normal"><i style="width:${Math.min(100, disc * 1.6)}%"></i></div>` : "";
     const airline = x.airline_name || x.airline || "–";
-    return `<article class="card ${x.level === "hot" ? "hot" : ""}">
+    return `<article class="card ${esc(x.level)}">
       <div class="card-top"><span>${esc(x.region_label)}</span>
-        <span class="tags">${x.level === "hot" ? `<span class="tag hot">HOT</span>` : ""}${isNew(x) ? `<span class="tag new">NEW</span>` : ""}</span></div>
+        <span class="tags">${x.level === "buy" ? `<span class="tag buy">BUY BUY BUY</span>` : x.level === "hot" ? `<span class="tag hot">HOT</span>` : ""}${isNew(x) ? `<span class="tag new">NEW</span>` : ""}</span></div>
       <div class="dest">
         <div><div class="city">${esc(x.city)}<span class="code">${esc(x.dest_airport || x.dest)}</span></div><div class="country">${esc(x.country)}</div></div>
         <div class="price"><div class="amt">${kr(x.price)}</div><div class="unit">return</div></div>
@@ -379,7 +390,7 @@
   $("sort").addEventListener("change", (e) => { state.sort = e.target.value; remember(); renderDeals(); });
   $("month").addEventListener("change", (e) => { state.month = e.target.value; renderDeals(); });
   $("maxPrice").addEventListener("input", (e) => { state.maxPrice = e.target.value; remember(); renderDeals(); });
-  $("hotOnly").addEventListener("change", (e) => { state.hotOnly = e.target.checked; remember(); renderDeals(); });
+  $("level").addEventListener("change", (e) => { state.level = e.target.value; remember(); renderDeals(); });
   const fromHash = () => { const h = location.hash.slice(1); if (["world", "europe", "info"].includes(h)) state.tab = h; };
   window.addEventListener("hashchange", () => { fromHash(); renderDeals(); });
   fromHash();

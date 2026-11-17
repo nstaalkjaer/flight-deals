@@ -17,7 +17,9 @@
     "min_samples_for_median": 6,
     "median_window_days": 30,
     "max_stops_each_way": 2,
-    "max_deals_per_destination": 3
+    "max_deals_per_destination": 3,
+    "buy_min_discount": 0.45,
+    "buy_max_share_of_limit": 0.60
   },
 
   "_exclude_countries": "Countries you never want to see (ISO codes). TR = Turkey.",
@@ -41,10 +43,10 @@
     "europe":           { "label": "Europe",                  "price_limit": 500,  "min_days": 3,  "max_days": 21, "europe": true }
   },
 
-  "_alerts": "Phone alerts via the free ntfy app. min_level 'deal' = every new deal, 'hot' = only the very best.",
+  "_alerts": "Phone alerts via the free ntfy app. min_level: 'deal' = every new deal, 'hot' = hot and up, 'buy' = only BUY BUY BUY deals.",
   "alerts": {
     "enabled": true,
-    "min_level": "deal",
+    "min_level": "buy",
     "include_europe": false,
     "max_per_run": 5,
     "realert_if_price_drops": 0.05,

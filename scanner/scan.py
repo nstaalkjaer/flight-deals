@@ -401,7 +401,11 @@ def find_deals(cfg: dict, offers: list[dict], history: dict, places: dict, state
             continue
         level = "hot" if (cheap_vs_normal and under_limit) else "deal"
         why = "both" if level == "hot" else ("median" if cheap_vs_normal else "limit")
-        score = max(discount or 0, (1 - o["price"] / limit) if limit else 0) + (0.25 if level == "hot" else 0)
+        if ((discount is not None and discount >= rule.get("buy_min_discount", 0.45))
+                or (limit and o["price"] <= limit * rule.get("buy_max_share_of_limit", 0.6))):
+            level = "buy"  # best of the best
+        score = (max(discount or 0, (1 - o["price"] / limit) if limit else 0)
+                 + {"deal": 0, "hot": 0.25, "buy": 0.5}[level])
         deal_id = f"{o['dest']}|{o['depart']}|{o['return']}"
         seen.setdefault(deal_id, iso(run_at))
         candidates.append({
@@ -458,7 +462,8 @@ def deal_reason(d: dict) -> str:
         if d["why"] == "both":
             reason += f" and under your {kr(d['price_limit'])} limit"
         return reason
-    return f"Under your {kr(d['price_limit'])} limit for {d['region_label']}"
+    return (f"Under your {kr(d['price_limit'])} limit for {d['region_label']} "
+            f"({round(d['price'] / d['price_limit'] * 100)}% of it)")
 
 
 def send_alerts(cfg: dict, deals: list[dict], state: dict, topic: str, page_url: str, run_at: datetime, errors: list) -> int:
@@ -469,11 +474,15 @@ def send_alerts(cfg: dict, deals: list[dict], state: dict, topic: str, page_url:
     alerted = state.setdefault("alerted", {})
     drop = a.get("realert_if_price_drops", 0.05)
 
+    rank = {"deal": 0, "hot": 1, "buy": 2}
+    min_rank = rank.get(a.get("min_level", "deal"), 0)
     eligible = [d for d in deals
                 if (a.get("include_europe") or not d["europe"])
-                and (a.get("min_level", "deal") == "deal" or d["level"] == "hot")]
+                and rank.get(d["level"], 0) >= min_rank]
     fresh = [d for d in eligible
-             if d["id"] not in alerted or d["price"] <= alerted[d["id"]]["price"] * (1 - drop)]
+             if d["id"] not in alerted
+             or d["price"] <= alerted[d["id"]]["price"] * (1 - drop)
+             or rank.get(d["level"], 0) > rank.get(alerted[d["id"]].get("level", "deal"), 0)]
     fresh.sort(key=lambda d: (-d["score"], d["price"]))
     one_per_city, cities = [], set()
     for d in fresh:  # only the best new deal per destination gets its own alert
@@ -491,7 +500,7 @@ def send_alerts(cfg: dict, deals: list[dict], state: dict, topic: str, page_url:
 
     def mark(ds):
         for d in ds:
-            alerted[d["id"]] = {"price": d["price"], "at": iso(run_at)}
+            alerted[d["id"]] = {"price": d["price"], "level": d["level"], "at": iso(run_at)}
 
     actions = [{"action": "view", "label": "All deals", "url": page_url}] if page_url else []
     sent = 0
@@ -510,12 +519,14 @@ def send_alerts(cfg: dict, deals: list[dict], state: dict, topic: str, page_url:
         return sent
 
     for d in one_per_city[: a.get("max_per_run", 5)]:
-        title = f"{'🔥 ' if d['level'] == 'hot' else ''}{d['city']} {kr(d['price'])} return"
+        prefix = {"buy": "💰 BUY BUY BUY · ", "hot": "🔥 "}.get(d["level"], "")
+        title = f"{prefix}{d['city']} {kr(d['price'])} return"
         msg = (f"CPH → {d['city']}, {d['country']}\n"
                f"{nice_date(d['depart'])} → {nice_date(d['return'])} ({d['days']} days) · {stops_text(d)}\n"
                f"{deal_reason(d)}")
         if post({"topic": topic, "title": title, "message": msg,
-                 "tags": ["airplane"], "priority": 4 if d["level"] == "hot" else 3,
+                 "tags": ["rotating_light" if d["level"] == "buy" else "airplane"],
+                 "priority": {"buy": 5, "hot": 4}.get(d["level"], 3),
                  "click": d["links"]["google"], "actions": actions}):
             sent += 1
     extra = len(fresh) - min(len(one_per_city), a.get("max_per_run", 5))
@@ -552,6 +563,8 @@ def base_output(cfg: dict, run_at: datetime, months: list[str]) -> dict:
             "median_window_days": cfg["deal_rule"]["median_window_days"],
             "min_samples_for_median": cfg["deal_rule"]["min_samples_for_median"],
             "max_stops_each_way": cfg["deal_rule"].get("max_stops_each_way"),
+            "buy_min_discount": cfg["deal_rule"].get("buy_min_discount", 0.45),
+            "buy_max_share_of_limit": cfg["deal_rule"].get("buy_max_share_of_limit", 0.6),
         },
         "regions": [
             {"key": k, "label": v.get("label", k), "price_limit": v.get("price_limit") or None,
@@ -624,6 +637,7 @@ def main(run_at: datetime | None = None) -> int:
         "destinations_seen": len({o["dest"] for o in offers}),
         "deals_world": sum(1 for d in deals if not d["europe"]),
         "deals_europe": sum(1 for d in deals if d["europe"]),
+        "deals_buy": sum(1 for d in deals if d["level"] == "buy"),
         "alerts_sent": alerts_sent,
     }
     save_json(OUTPUT_PATH, out)
