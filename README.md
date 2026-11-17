@@ -16,6 +16,8 @@ A flight counts if **either** of these is true:
 
 If both are true, it's marked 🔥 **hot**.
 
+The best of the best are marked 💰 **BUY BUY BUY**: at least **45% under the median**, or at most **60% of the region's price limit** (for example, 1.800 kr or less to Southeast Asia). Only BUY BUY BUY deals outside Europe send phone alerts.
+
 Trips outside Europe must be 12–35 days. Europe has its own tab with 3–21 day trips, and Europe deals don't send phone alerts. Layovers are fine, up to 2 each way.
 
 Turkey is left out completely (`exclude_countries` in `config.json`). The UK, Norway, Iceland, Switzerland and the Balkans are in the Europe tab.
@@ -56,14 +58,14 @@ Anyone who knows the topic name can read the alerts, so keep it random.
 ### 6. Run the first scan
 Go to **Actions → Scan flights → Run workflow**. After about a minute:
 - the page shows deals, and
-- your phone gets one message, "CPH deal radar is live". After that, you get up to 5 alerts per scan for new deals.
+- your phone gets one message, "CPH deal radar is live". After that, you only get alerts for new BUY BUY BUY deals (up to 5 per scan).
 
 ## Good to know
 - Prices come from searches other people made in the last few days, so they can be out of date. Always confirm the price on Google Flights or Skyscanner before booking. Each deal card has buttons for both.
 - The median needs a few days of scans to settle. In the first week, most deals come from the region price limits.
 - GitHub sometimes starts scheduled runs 10–30 minutes late. That's normal.
 - GitHub pauses scheduled jobs in repositories with no activity for 60 days. The scanner saves its results after every run, which should count as activity. If runs ever stop, open **Actions** and click **Enable workflow**.
-- To get alerts only for the best deals, set `"min_level": "hot"` in `config.json`.
+- Alerts are set to BUY BUY BUY only (`"min_level": "buy"` in `config.json`). Use `"hot"` or `"deal"` for more alerts.
 
 ## Files
 | File | What it does |
