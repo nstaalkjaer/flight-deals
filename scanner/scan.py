@@ -16,6 +16,7 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -88,6 +89,9 @@ def http_get_json(url: str, params: dict | None = None, token: str | None = None
             last_error = f"HTTP {e.code}: {body.decode('utf-8', 'replace')[:200]}"
             if e.code in (400, 401, 403, 404):
                 break  # retrying will not help
+        except UnicodeError as e:  # bad characters in the request; retrying will not help
+            last_error = f"{type(e).__name__}: {e}"
+            break
         except Exception as e:  # network hiccup, timeout, bad json
             last_error = f"{type(e).__name__}: {e}"
         time.sleep(2 * (attempt + 1))
@@ -103,6 +107,21 @@ def http_post_json(url: str, payload: dict):
     )
     with urllib.request.urlopen(req, timeout=20) as resp:
         resp.read()
+
+
+def clean_token(raw: str):
+    """Pull the API token out of the secret, even if extra text was pasted with it."""
+    raw = (raw or "").strip()
+    if not raw:
+        return "", None
+    if re.fullmatch(r"[A-Za-z0-9_\-]{16,128}", raw):
+        return raw, None
+    m = (re.search(r"(?<![A-Za-z0-9])[a-fA-F0-9]{32}(?![A-Za-z0-9])", raw)
+         or re.search(r"(?<![A-Za-z0-9])(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{24,64}(?![A-Za-z0-9])", raw))
+    if m:
+        return m.group(0), "The TRAVELPAYOUTS_TOKEN secret has extra text around the token; using the token inside it."
+    return "", ("The TRAVELPAYOUTS_TOKEN secret doesn't look like an API token. Copy just the token from "
+                "Travelpayouts → Profile → API token and save the secret again.")
 
 
 def kr(amount) -> str:
@@ -552,14 +571,16 @@ def main(run_at: datetime | None = None) -> int:
         return 1
     run_at = run_at or datetime.now(timezone.utc)
     today = run_at.date()
-    token = os.environ.get("TRAVELPAYOUTS_TOKEN", "").strip()
+    token, token_note = clean_token(os.environ.get("TRAVELPAYOUTS_TOKEN", ""))
     topic = os.environ.get("NTFY_TOPIC", "").strip()
     months = months_to_scan(cfg, today)
     out = base_output(cfg, run_at, months)
     previous = load_json(OUTPUT_PATH, {})
+    if token_note:
+        log(token_note)
 
     if not token:
-        out["errors"].append("No API token yet. Add TRAVELPAYOUTS_TOKEN under Settings → "
+        out["errors"].append(token_note or "No API token yet. Add TRAVELPAYOUTS_TOKEN under Settings → "
                              "Secrets and variables → Actions in your GitHub repository.")
         out["deals"] = previous.get("deals", [])
         save_json(OUTPUT_PATH, out)
