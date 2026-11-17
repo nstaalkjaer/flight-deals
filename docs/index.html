@@ -335,7 +335,7 @@
     const disc = x.discount != null && x.discount > 0 ? Math.round(x.discount * 100) : null;
     const pills = [];
     if (disc != null && (x.why === "median" || x.why === "both")) pills.push(`<span class="pill disc">−${disc}% vs normal ${kr(x.median)}</span>`);
-    else if (x.median) pills.push(`<span class="pill">Normal ≈ ${kr(x.median)}</span>`);
+    else if (x.median && x.samples >= ((state.data.rules || {}).min_samples_for_median || 6)) pills.push(`<span class="pill">Normal ≈ ${kr(x.median)}</span>`);
     if (x.price_limit && x.price <= x.price_limit) pills.push(`<span class="pill">Under ${kr(x.price_limit)} limit</span>`);
     const meter = disc != null && disc > 0 ? `<div class="meter" title="${disc}% under normal"><i style="width:${Math.min(100, disc * 1.6)}%"></i></div>` : "";
     const airline = x.airline_name || x.airline || "–";
