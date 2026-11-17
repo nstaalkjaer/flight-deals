@@ -1,0 +1,40 @@
+name: Scan flights
+
+on:
+  schedule:
+    # every 3 hours (times are UTC). GitHub may start runs a few minutes late.
+    - cron: "17 */3 * * *"
+  workflow_dispatch: {}   # adds a "Run workflow" button for manual runs
+
+permissions:
+  contents: write
+
+concurrency:
+  group: flight-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for deals
+        env:
+          TRAVELPAYOUTS_TOKEN: ${{ secrets.TRAVELPAYOUTS_TOKEN }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python3 scanner/scan.py
+
+      - name: Save results
+        run: |
+          git config user.name "deal-radar-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/deals.json data/
+          if git diff --cached --quiet; then
+            echo "Nothing changed"
+          else
+            git commit -m "Scan $(date -u +'%Y-%m-%d %H:%M') UTC"
+            git pull --rebase --quiet
+            git push
+          fi

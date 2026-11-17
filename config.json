@@ -1,0 +1,55 @@
+{
+  "origin": "CPH",
+  "currency": "dkk",
+
+  "_scan": "Which departure months to look at. 0 = this month, 9 = nine months from now. Long-haul deals usually show up 1-8 months ahead.",
+  "scan": {
+    "months_from": 0,
+    "months_to": 9,
+    "min_days_until_departure": 7,
+    "max_pages_per_month": 2,
+    "markets": [""]
+  },
+
+  "_deal_rule": "A flight is a deal if it is at least min_discount below the median price for that destination in that month, OR under the region's price limit. 'hot' = both at once.",
+  "deal_rule": {
+    "min_discount": 0.30,
+    "min_samples_for_median": 6,
+    "median_window_days": 30,
+    "max_stops_each_way": 2,
+    "max_deals_per_destination": 3
+  },
+
+  "_exclude_countries": "Countries you never want to see (ISO codes). TR = Turkey.",
+  "exclude_countries": ["TR"],
+
+  "_regions": "price_limit = return price in DKK per person that always counts as a deal. min_days/max_days = trip length. europe=true puts the region in the separate Europe tab.",
+  "regions": {
+    "southeast_asia":   { "label": "Southeast Asia",          "price_limit": 3000, "min_days": 12, "max_days": 35 },
+    "east_asia":        { "label": "East Asia",               "price_limit": 3500, "min_days": 12, "max_days": 35 },
+    "south_asia":       { "label": "South Asia",              "price_limit": 3000, "min_days": 12, "max_days": 35 },
+    "middle_east":      { "label": "Middle East",             "price_limit": 2000, "min_days": 12, "max_days": 35 },
+    "caucasus_central_asia": { "label": "Caucasus & Central Asia", "price_limit": 1500, "min_days": 12, "max_days": 35 },
+    "north_africa":     { "label": "North Africa",            "price_limit": 1200, "min_days": 12, "max_days": 35 },
+    "africa":           { "label": "Sub-Saharan Africa",      "price_limit": 3500, "min_days": 12, "max_days": 35 },
+    "indian_ocean":     { "label": "Indian Ocean islands",    "price_limit": 4500, "min_days": 12, "max_days": 35 },
+    "north_america":    { "label": "USA & Canada",            "price_limit": 2700, "min_days": 12, "max_days": 35 },
+    "caribbean_central":{ "label": "Mexico, Central America & Caribbean", "price_limit": 3500, "min_days": 12, "max_days": 35 },
+    "south_america":    { "label": "South America",           "price_limit": 4000, "min_days": 12, "max_days": 35 },
+    "oceania":          { "label": "Australia & Pacific",     "price_limit": 5500, "min_days": 12, "max_days": 35 },
+    "other":            { "label": "Other",                   "price_limit": 0,    "min_days": 12, "max_days": 35 },
+    "europe":           { "label": "Europe",                  "price_limit": 500,  "min_days": 3,  "max_days": 21, "europe": true }
+  },
+
+  "_alerts": "Phone alerts via the free ntfy app. min_level 'deal' = every new deal, 'hot' = only the very best.",
+  "alerts": {
+    "enabled": true,
+    "min_level": "deal",
+    "include_europe": false,
+    "max_per_run": 5,
+    "realert_if_price_drops": 0.05,
+    "ntfy_server": "https://ntfy.sh"
+  },
+
+  "page_url": ""
+}

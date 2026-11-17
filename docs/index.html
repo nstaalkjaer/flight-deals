@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CPH Deal Radar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* Layout idea: an airport departures board. Amber mono prices, one card per fare, filters on top. */
+  :root {
+    color-scheme: light;
+    --bg: #eef0f3; --panel: #ffffff; --panel-2: #f3f5f8; --line: #dde2e9;
+    --text: #141a23; --muted: #5d6878; --amber: #a85f00; --amber-dim: rgba(168, 95, 0, 0.1);
+    --hot: #c8381a; --hot-dim: rgba(200, 56, 26, 0.1); --good: #0f7a4a; --good-dim: rgba(15, 122, 74, 0.1);
+    --link: #0b5fae; --on-amber: #ffffff;
+    --radius: 14px;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0d1117; --panel: #151b24; --panel-2: #1c2430; --line: #273142;
+      --text: #e8edf4; --muted: #8b97a8; --amber: #ffb547; --amber-dim: rgba(255, 181, 71, 0.14);
+      --hot: #ff6b4a; --hot-dim: rgba(255, 107, 74, 0.16); --good: #4ade9a; --good-dim: rgba(74, 222, 154, 0.13);
+      --link: #7cc4ff; --on-amber: #1a1205;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0d1117; --panel: #151b24; --panel-2: #1c2430; --line: #273142;
+    --text: #e8edf4; --muted: #8b97a8; --amber: #ffb547; --amber-dim: rgba(255, 181, 71, 0.14);
+    --hot: #ff6b4a; --hot-dim: rgba(255, 107, 74, 0.16); --good: #4ade9a; --good-dim: rgba(74, 222, 154, 0.13);
+    --link: #7cc4ff; --on-amber: #1a1205;
+  }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  .amt, .v, td.num, .count { font-variant-numeric: tabular-nums; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font-family: var(--sans); font-size: 15px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+  a { color: var(--link); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 18px 60px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
+  .brand { display: flex; flex-direction: column; gap: 4px; }
+  .route { font-family: var(--mono); font-weight: 700; font-size: clamp(26px, 5vw, 40px); letter-spacing: 0.02em; color: var(--amber); line-height: 1; }
+  .route span { color: var(--text); }
+  .sub { color: var(--muted); font-size: 14px; }
+  .status { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px var(--good-dim); }
+  .status.warn .dot { background: var(--amber); box-shadow: 0 0 0 3px var(--amber-dim); }
+  .status.bad .dot { background: var(--hot); box-shadow: 0 0 0 3px var(--hot-dim); }
+
+  .banner { border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px; font-size: 14px; }
+  .banner.sample { border-color: var(--amber); background: var(--amber-dim); }
+  .banner.error { border-color: var(--hot); background: var(--hot-dim); }
+  .banner b { font-weight: 600; }
+  .banner details { margin-top: 6px; color: var(--muted); }
+  .banner ul { margin: 6px 0 0; padding-left: 18px; font-family: var(--mono); font-size: 12px; }
+
+  nav.tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin-bottom: 14px; overflow-x: auto; }
+  nav.tabs button { all: unset; cursor: pointer; padding: 10px 14px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; }
+  nav.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--amber); }
+  nav.tabs .count { font-family: var(--mono); font-size: 12px; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; flex: 1 1 100%; scrollbar-width: thin; }
+  .chip { all: unset; cursor: pointer; white-space: nowrap; font-size: 13px; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); }
+  .chip[aria-pressed="true"] { border-color: var(--amber); color: var(--text); background: var(--amber-dim); }
+  .field { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  select, input[type=number] { font: inherit; font-size: 13px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; }
+  input[type=number] { width: 96px; font-family: var(--mono); }
+  label.toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+  label.toggle input { accent-color: var(--hot); width: 16px; height: 16px; }
+
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 15px 15px 13px; display: flex; flex-direction: column; gap: 10px; position: relative; }
+  .card.hot { border-color: color-mix(in srgb, var(--hot) 55%, var(--line)); }
+  .card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .tags { display: flex; gap: 6px; }
+  .tag { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; padding: 2px 7px; border-radius: 6px; }
+  .tag.hot { background: var(--hot-dim); color: var(--hot); }
+  .tag.new { background: var(--good-dim); color: var(--good); }
+  .dest { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .city { font-size: 21px; font-weight: 700; line-height: 1.15; }
+  .country { color: var(--muted); font-size: 13px; }
+  .code { font-family: var(--mono); color: var(--muted); font-size: 12px; margin-left: 4px; }
+  .price { text-align: right; flex-shrink: 0; }
+  .price .amt { font-family: var(--mono); font-weight: 700; font-size: 24px; color: var(--amber); line-height: 1.1; }
+  .card.hot .price .amt { color: var(--hot); }
+  .price .unit { font-size: 12px; color: var(--muted); }
+  .why { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--panel-2); color: var(--text); }
+  .pill.disc { background: var(--good-dim); color: var(--good); font-weight: 600; }
+  .meter { height: 5px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+  .meter > i { display: block; height: 100%; background: linear-gradient(90deg, var(--good), var(--amber)); }
+  .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 13px; }
+  .facts .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .facts .v { font-family: var(--mono); font-size: 13px; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+  .btn { text-decoration: none; font-size: 13px; font-weight: 600; padding: 7px 11px; border-radius: 9px; border: 1px solid var(--line); color: var(--text); background: var(--panel-2); }
+  .btn.primary { background: var(--amber); border-color: var(--amber); color: var(--on-amber); }
+  .seen { font-size: 11px; color: var(--muted); }
+
+  .empty { text-align: center; padding: 50px 20px; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius); }
+  .empty b { display: block; color: var(--text); font-size: 17px; margin-bottom: 6px; }
+
+  .info { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .box { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+  .box h3 { margin: 0 0 10px; font-size: 15px; }
+  .box p, .box li { font-size: 14px; color: var(--text); }
+  .box p { margin: 0 0 8px; }
+  .box ul { margin: 0; padding-left: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  td.num { font-family: var(--mono); text-align: right; white-space: nowrap; }
+  th.num { text-align: right; }
+
+  footer { margin-top: 28px; color: var(--muted); font-size: 12px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="route">CPH <span>→</span> ANYWHERE</div>
+      <div class="sub" id="sub">Loading deals…</div>
+    </div>
+    <div class="status" id="status"><span class="dot"></span><span id="statusText">Loading</span></div>
+  </header>
+
+  <div id="banners"></div>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="world" aria-selected="true">World <span class="count" id="countWorld">0</span></button>
+    <button role="tab" data-tab="europe" aria-selected="false">Europe <span class="count" id="countEurope">0</span></button>
+    <button role="tab" data-tab="info" aria-selected="false">How it works</button>
+  </nav>
+
+  <section id="dealsView">
+    <div class="controls">
+      <div class="chips" id="chips"></div>
+      <div class="field">Sort
+        <select id="sort">
+          <option value="score">Best deal</option>
+          <option value="price">Lowest price</option>
+          <option value="date">Soonest departure</option>
+          <option value="new">Newest</option>
+        </select>
+      </div>
+      <div class="field">Month
+        <select id="month"><option value="">Any</option></select>
+      </div>
+      <div class="field">Max <input type="number" id="maxPrice" min="0" step="250" placeholder="kr"></div>
+      <label class="toggle"><input type="checkbox" id="hotOnly"> 🔥 Hot only</label>
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <section id="infoView" hidden>
+    <div class="info">
+      <div class="box">
+        <h3>What counts as a deal</h3>
+        <p id="ruleText"></p>
+        <p><b>Hot</b> means both are true at once.</p>
+        <p>Trips outside Europe are at least 12 days. Europe trips are 3–21 days and stay on their own tab. Layovers are allowed, up to <span id="maxStops">2</span> each way.</p>
+      </div>
+      <div class="box">
+        <h3>Price limits by region</h3>
+        <table>
+          <thead><tr><th>Region</th><th class="num">Limit</th><th class="num">Trip</th></tr></thead>
+          <tbody id="regionRows"></tbody>
+        </table>
+      </div>
+      <div class="box">
+        <h3>When to book</h3>
+        <ul>
+          <li>Long-haul from Europe is usually cheapest about 1–4 months before departure; some studies say up to 8 months.</li>
+          <li>Inside Europe, about 1–3 months ahead is typical.</li>
+          <li>Christmas, New Year, Easter and summer holidays: book earlier, around 4–8 months out.</li>
+          <li>Real deals and error fares disappear in hours, so book first and plan after (most EU bookings can't be cancelled for free, so check the fare rules).</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>Where the prices come from</h3>
+        <p>A scanner runs every 3 hours on GitHub, for free. It asks the Travelpayouts / Aviasales data service for the cheapest return flights from Copenhagen to everywhere for the next 10 months.</p>
+        <p>These prices come from searches other travellers made in the last few days, so they can be a little out of date. Always check the price on Google Flights or Skyscanner before you book.</p>
+        <p id="statsText" class="seen"></p>
+      </div>
+    </div>
+  </section>
+
+  <footer>Prices are per person, return, economy, in DKK. Made for personal use.</footer>
+</div>
+
+<script>
+(() => {
+  const state = { data: null, tab: "world", region: "all", sort: "score", month: "", maxPrice: "", hotOnly: false };
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const kr = (n) => n == null ? "–" : Math.round(n).toLocaleString("da-DK") + " kr";
+  const dmon = (s) => new Date(s + "T12:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  const monthName = (ym) => new Date(ym + "-15T12:00:00Z").toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+  const ago = (iso) => {
+    if (!iso) return "";
+    const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    if (mins < 60) return mins <= 1 ? "just now" : `${mins} min ago`;
+    const h = Math.round(mins / 60);
+    if (h < 48) return `${h} h ago`;
+    return `${Math.round(h / 24)} days ago`;
+  };
+  const isNew = (d) => d.first_seen && (Date.now() - new Date(d.first_seen).getTime()) < 24 * 3600 * 1000;
+  const stops = (n) => n == null ? "?" : n === 0 ? "direct" : `${n} stop${n > 1 ? "s" : ""}`;
+
+  const store = {
+    get() { try { return JSON.parse(localStorage.getItem("cphDealRadar") || "{}"); } catch { return {}; } },
+    set(v) { try { localStorage.setItem("cphDealRadar", JSON.stringify(v)); } catch {} },
+  };
+  Object.assign(state, store.get());
+  const remember = () => store.set({ sort: state.sort, maxPrice: state.maxPrice, hotOnly: state.hotOnly });
+
+  async function load() {
+    try {
+      const res = await fetch("deals.json?t=" + Date.now(), { cache: "no-store" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      state.data = await res.json();
+    } catch (e) {
+      state.data = null;
+      setStatus("bad", "No data");
+      $("sub").textContent = "Couldn't load deals.json";
+      $("banners").innerHTML = `<div class="banner error"><b>The deal list isn't there yet.</b> Once the scanner has run on GitHub, the deals show up here.</div>`;
+      return;
+    }
+    render();
+  }
+
+  function setStatus(kind, text) {
+    $("status").className = "status " + (kind || "");
+    $("statusText").textContent = text;
+  }
+
+  function render() {
+    const d = state.data;
+    const deals = d.deals || [];
+    const world = deals.filter((x) => !x.europe), europe = deals.filter((x) => x.europe);
+    $("countWorld").textContent = world.length;
+    $("countEurope").textContent = europe.length;
+    const months = d.months_scanned || [];
+    $("sub").textContent = !d.generated_at ? "Waiting for the first scan"
+      : `Updated ${ago(d.generated_at)}${months.length ? " · " + monthName(months[0]) + " – " + monthName(months[months.length - 1]) : ""}`;
+
+    let banners = "";
+    if (d.sample) {
+      banners += `<div class="banner sample"><b>Preview with made-up sample prices.</b> These are not real offers. Real deals show up here after the scanner's first run with your API key.</div>`;
+    }
+    if (d.errors && d.errors.length) {
+      banners += `<div class="banner error"><b>${d.stale ? "The last scan didn't work, so these are the previous deals." : "The last scan had some problems."}</b>
+        <details><summary>Details</summary><ul>${d.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></details></div>`;
+    }
+    $("banners").innerHTML = banners;
+    if (d.sample) setStatus("warn", "Sample");
+    else if (!d.generated_at) setStatus("warn", "Waiting");
+    else if (d.stale || (d.errors || []).some((e) => /token/i.test(e))) setStatus("bad", "Check setup");
+    else {
+      const ageH = (Date.now() - new Date(d.generated_at).getTime()) / 3600000;
+      ageH > 8 ? setStatus("warn", "Scan overdue") : setStatus("", "Live");
+    }
+
+    // info tab
+    const r = d.rules || {};
+    $("ruleText").innerHTML = `A flight is a deal when it's at least <b>${Math.round((r.min_discount || 0.3) * 100)}% under the median price</b> for that destination in that month (median over the last ${r.median_window_days || 30} days of scans), <b>or</b> it's under the price limit for its region.`;
+    $("maxStops").textContent = r.max_stops_each_way ?? 2;
+    $("regionRows").innerHTML = (d.regions || []).filter((g) => g.key !== "other").map((g) =>
+      `<tr><td>${esc(g.label)}</td><td class="num">${g.price_limit ? kr(g.price_limit) : "–"}</td><td class="num">${g.min_days}–${g.max_days} d</td></tr>`).join("");
+    const s = d.stats || {};
+    $("statsText").textContent = s.offers_seen != null
+      ? `Last scan: ${s.offers_seen.toLocaleString("da-DK")} prices checked across ${s.destinations_seen ?? "?"} destinations, ${s.api_calls ?? "?"} API calls.` : "";
+
+    renderDeals();
+  }
+
+  function renderDeals() {
+    const d = state.data;
+    if (!d) return;
+    const showInfo = state.tab === "info";
+    $("dealsView").hidden = showInfo;
+    $("infoView").hidden = !showInfo;
+    document.querySelectorAll("nav.tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
+    if (showInfo) return;
+
+    const inTab = (d.deals || []).filter((x) => state.tab === "europe" ? x.europe : !x.europe);
+
+    // region chips
+    const regions = [...new Map(inTab.map((x) => [x.region, x.region_label])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    if (state.region !== "all" && !regions.some(([k]) => k === state.region)) state.region = "all";
+    $("chips").innerHTML = [["all", `All (${inTab.length})`], ...regions.map(([k, l]) => [k, `${l} (${inTab.filter((x) => x.region === k).length})`])]
+      .map(([k, l]) => `<button class="chip" data-region="${esc(k)}" aria-pressed="${state.region === k}">${esc(l)}</button>`).join("");
+    $("chips").style.display = state.tab === "europe" ? "none" : "";
+
+    // month options
+    const months = [...new Set(inTab.map((x) => x.depart.slice(0, 7)))].sort();
+    if (state.month && !months.includes(state.month)) state.month = "";
+    $("month").innerHTML = `<option value="">Any</option>` + months.map((m) => `<option value="${m}" ${m === state.month ? "selected" : ""}>${monthName(m)}</option>`).join("");
+    $("sort").value = state.sort;
+    $("maxPrice").value = state.maxPrice;
+    $("hotOnly").checked = !!state.hotOnly;
+
+    let list = inTab.filter((x) =>
+      (state.region === "all" || state.tab === "europe" || x.region === state.region) &&
+      (!state.month || x.depart.startsWith(state.month)) &&
+      (!state.maxPrice || x.price <= Number(state.maxPrice)) &&
+      (!state.hotOnly || x.level === "hot"));
+    const sorters = {
+      score: (a, b) => b.score - a.score || a.price - b.price,
+      price: (a, b) => a.price - b.price,
+      date: (a, b) => a.depart.localeCompare(b.depart),
+      new: (a, b) => (b.first_seen || "").localeCompare(a.first_seen || "") || b.score - a.score,
+    };
+    list.sort(sorters[state.sort] || sorters.score);
+
+    if (!list.length) {
+      const why = inTab.length ? "Try loosening the filters." :
+        (state.tab === "europe" ? "No Europe deals right now." : "No deals right now. The scanner checks again every 3 hours.");
+      $("grid").innerHTML = `<div class="empty" style="grid-column:1/-1"><b>Nothing here</b>${why}</div>`;
+      return;
+    }
+    $("grid").innerHTML = list.map(card).join("");
+  }
+
+  function card(x) {
+    const disc = x.discount != null && x.discount > 0 ? Math.round(x.discount * 100) : null;
+    const pills = [];
+    if (disc != null && (x.why === "median" || x.why === "both")) pills.push(`<span class="pill disc">−${disc}% vs normal ${kr(x.median)}</span>`);
+    else if (x.median) pills.push(`<span class="pill">Normal ≈ ${kr(x.median)}</span>`);
+    if (x.price_limit && x.price <= x.price_limit) pills.push(`<span class="pill">Under ${kr(x.price_limit)} limit</span>`);
+    const meter = disc != null && disc > 0 ? `<div class="meter" title="${disc}% under normal"><i style="width:${Math.min(100, disc * 1.6)}%"></i></div>` : "";
+    const airline = x.airline_name || x.airline || "–";
+    return `<article class="card ${x.level === "hot" ? "hot" : ""}">
+      <div class="card-top"><span>${esc(x.region_label)}</span>
+        <span class="tags">${x.level === "hot" ? `<span class="tag hot">HOT</span>` : ""}${isNew(x) ? `<span class="tag new">NEW</span>` : ""}</span></div>
+      <div class="dest">
+        <div><div class="city">${esc(x.city)}<span class="code">${esc(x.dest_airport || x.dest)}</span></div><div class="country">${esc(x.country)}</div></div>
+        <div class="price"><div class="amt">${kr(x.price)}</div><div class="unit">return</div></div>
+      </div>
+      <div class="why">${pills.join("")}</div>${meter}
+      <div class="facts">
+        <div><div class="k">Dates</div><div class="v">${dmon(x.depart)} → ${dmon(x.return)}</div></div>
+        <div><div class="k">Length</div><div class="v">${x.days} days</div></div>
+        <div><div class="k">Stops out / back</div><div class="v">${stops(x.stops_out)} / ${stops(x.stops_back)}</div></div>
+        <div><div class="k">Airline</div><div class="v">${esc(airline)}</div></div>
+      </div>
+      <div class="actions">
+        <a class="btn primary" href="${esc(x.links.google)}" target="_blank" rel="noopener">Google Flights</a>
+        <a class="btn" href="${esc(x.links.skyscanner)}" target="_blank" rel="noopener">Skyscanner</a>
+        <a class="btn" href="${esc(x.links.aviasales)}" target="_blank" rel="noopener">Aviasales</a>
+      </div>
+      <div class="seen">First seen ${ago(x.first_seen)}</div>
+    </article>`;
+  }
+
+  // events
+  document.querySelector("nav.tabs").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-tab]");
+    if (!b) return;
+    state.tab = b.dataset.tab;
+    try { if (location.hash.slice(1) !== state.tab) history.replaceState(null, "", "#" + state.tab); } catch {}
+    renderDeals();
+  });
+  $("chips").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-region]");
+    if (!b) return;
+    state.region = b.dataset.region;
+    renderDeals();
+  });
+  $("sort").addEventListener("change", (e) => { state.sort = e.target.value; remember(); renderDeals(); });
+  $("month").addEventListener("change", (e) => { state.month = e.target.value; renderDeals(); });
+  $("maxPrice").addEventListener("input", (e) => { state.maxPrice = e.target.value; remember(); renderDeals(); });
+  $("hotOnly").addEventListener("change", (e) => { state.hotOnly = e.target.checked; remember(); renderDeals(); });
+  const fromHash = () => { const h = location.hash.slice(1); if (["world", "europe", "info"].includes(h)) state.tab = h; };
+  window.addEventListener("hashchange", () => { fromHash(); renderDeals(); });
+  fromHash();
+
+  load();
+  setInterval(load, 10 * 60 * 1000);
+})();
+</script>
+</body>
+</html>
