@@ -2,8 +2,8 @@ name: Scan flights
 
 on:
   schedule:
-    # every 3 hours (times are UTC). GitHub may start runs a few minutes late.
-    - cron: "17 */3 * * *"
+    # every hour at :17 (times are UTC). GitHub may start runs a few minutes late.
+    - cron: "17 * * * *"
   workflow_dispatch: {}   # adds a "Run workflow" button for manual runs
 
 permissions:
