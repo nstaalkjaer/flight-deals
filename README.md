@@ -2,7 +2,7 @@
 
 A free, self-running flight deal finder for return flights from Copenhagen.
 
-- **Scanner:** runs every hour on GitHub Actions (free for public repositories). It doesn't use Claude or any tokens.
+- **Scanner:** runs every 30 minutes on GitHub Actions (free for public repositories). It doesn't use Claude or any tokens.
 - **Prices:** from the Travelpayouts / Aviasales Data API (free token).
 - **Live page:** GitHub Pages (free) at `https://nstaalkjaer.github.io/flight-deals/`.
 - **Phone alerts:** the free ntfy app.
@@ -73,7 +73,7 @@ Go to **Actions → Scan flights → Run workflow**. After about a minute:
 | `config.json` | Your settings: price limits, trip lengths, the 30% rule, alerts |
 | `scanner/scan.py` | The scanner (plain Python, nothing to install) |
 | `scanner/regions.py` | Which country belongs to which region |
-| `.github/workflows/scan.yml` | The hourly schedule |
+| `.github/workflows/scan.yml` | The schedule (every 30 minutes) |
 | `docs/index.html` | The live deal page |
 | `docs/deals.json` | The latest deals (written by the scanner) |
 | `data/` | Price history and alert memory (written by the scanner) |

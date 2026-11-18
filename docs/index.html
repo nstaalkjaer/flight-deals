@@ -201,7 +201,7 @@
       </div>
       <div class="box">
         <h3>Where the prices come from</h3>
-        <p>A scanner runs every hour on GitHub, for free. It asks the Travelpayouts / Aviasales data service for the cheapest return flights from Copenhagen to everywhere for the next 10 months.</p>
+        <p>A scanner runs every 30 minutes on GitHub, for free. It asks the Travelpayouts / Aviasales data service for the cheapest return flights from Copenhagen to everywhere for the next 10 months.</p>
         <p>These prices come from searches other travellers made in the last few days, so they can be a little out of date. Always check the price on Google Flights or Skyscanner before you book.</p>
         <p>It also checks other countries' versions of Aviasales ("markets"), because they can list different travel agencies and prices. Each deal shows which market had the lowest price.</p>
         <p id="statsText" class="seen"></p>
@@ -350,7 +350,7 @@
 
     if (!list.length) {
       const why = inTab.length ? "Try loosening the filters." :
-        (state.tab === "europe" ? "No Europe deals right now." : "No deals right now. The scanner checks again every hour.");
+        (state.tab === "europe" ? "No Europe deals right now." : "No deals right now. The scanner checks again every 30 minutes.");
       $("grid").innerHTML = `<div class="empty" style="grid-column:1/-1"><b>Nothing here</b>${why}</div>`;
       return;
     }
