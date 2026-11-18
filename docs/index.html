@@ -106,6 +106,7 @@
   .btn { text-decoration: none; font-size: 13px; font-weight: 600; padding: 7px 11px; border-radius: 9px; border: 1px solid var(--line); color: var(--text); background: var(--panel-2); }
   .btn.primary { background: var(--amber); border-color: var(--amber); color: var(--on-amber); }
   .seen { font-size: 11px; color: var(--muted); }
+  .mkt { font-size: 12px; color: var(--muted); }
 
   .empty { text-align: center; padding: 50px 20px; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius); }
   .empty b { display: block; color: var(--text); font-size: 17px; margin-bottom: 6px; }
@@ -158,6 +159,9 @@
       <div class="field">Month
         <select id="month"><option value="">Any</option></select>
       </div>
+      <div class="field">Market
+        <select id="market"><option value="">All</option></select>
+      </div>
       <div class="field">Max <input type="number" id="maxPrice" min="0" step="250" placeholder="kr"></div>
       <div class="field">Show
         <select id="level">
@@ -199,7 +203,9 @@
         <h3>Where the prices come from</h3>
         <p>A scanner runs every hour on GitHub, for free. It asks the Travelpayouts / Aviasales data service for the cheapest return flights from Copenhagen to everywhere for the next 10 months.</p>
         <p>These prices come from searches other travellers made in the last few days, so they can be a little out of date. Always check the price on Google Flights or Skyscanner before you book.</p>
+        <p>It also checks other countries' versions of Aviasales ("markets"), because they can list different travel agencies and prices. Each deal shows which market had the lowest price.</p>
         <p id="statsText" class="seen"></p>
+        <p id="marketText" class="seen"></p>
       </div>
     </div>
   </section>
@@ -209,7 +215,7 @@
 
 <script>
 (() => {
-  const state = { data: null, tab: "world", region: "all", sort: "score", month: "", maxPrice: "", level: "" };
+  const state = { data: null, tab: "world", region: "all", sort: "score", month: "", maxPrice: "", level: "", market: "" };
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const kr = (n) => n == null ? "–" : Math.round(n).toLocaleString("da-DK") + " kr";
@@ -225,6 +231,9 @@
   };
   const isNew = (d) => d.first_seen && (Date.now() - new Date(d.first_seen).getTime()) < 24 * 3600 * 1000;
   const stops = (n) => n == null ? "?" : n === 0 ? "direct" : `${n} stop${n > 1 ? "s" : ""}`;
+  const MK = { default: "Default", dk: "Denmark", us: "USA", gb: "UK", de: "Germany", se: "Sweden", es: "Spain", no: "Norway", fr: "France", it: "Italy", pl: "Poland", nl: "Netherlands", fi: "Finland", in: "India", th: "Thailand", ru: "Russia" };
+  const flag = (c) => /^[a-z]{2}$/.test(c) ? String.fromCodePoint(...[...c.toUpperCase()].map((ch) => 127397 + ch.charCodeAt(0))) : "🌐";
+  const mname = (c) => `${flag(c || "default")} ${MK[c || "default"] || String(c).toUpperCase()}`;
 
   const store = {
     get() { try { return JSON.parse(localStorage.getItem("cphDealRadar") || "{}"); } catch { return {}; } },
@@ -291,6 +300,8 @@
     $("statsText").textContent = s.offers_seen != null
       ? `Last scan: ${s.offers_seen.toLocaleString("da-DK")} prices checked across ${s.destinations_seen ?? "?"} destinations, ${s.api_calls ?? "?"} API calls.` : "";
 
+    $("marketText").textContent = s.markets ? "Prices per market: " + Object.entries(s.markets).map(([m, n]) => `${mname(m)} ${n.toLocaleString("da-DK")}`).join(" · ") : "";
+
     renderDeals();
   }
 
@@ -316,6 +327,9 @@
     const months = [...new Set(inTab.map((x) => x.depart.slice(0, 7)))].sort();
     if (state.month && !months.includes(state.month)) state.month = "";
     $("month").innerHTML = `<option value="">Any</option>` + months.map((m) => `<option value="${m}" ${m === state.month ? "selected" : ""}>${monthName(m)}</option>`).join("");
+    const mkts = [...new Set(inTab.map((x) => x.market || "default"))].sort();
+    if (state.market && !mkts.includes(state.market)) state.market = "";
+    $("market").innerHTML = `<option value="">All</option>` + mkts.map((m) => `<option value="${esc(m)}" ${m === state.market ? "selected" : ""}>${esc(mname(m))}</option>`).join("");
     $("sort").value = state.sort;
     $("maxPrice").value = state.maxPrice;
     $("level").value = state.level || "";
@@ -323,6 +337,7 @@
     let list = inTab.filter((x) =>
       (state.region === "all" || state.tab === "europe" || x.region === state.region) &&
       (!state.month || x.depart.startsWith(state.month)) &&
+      (!state.market || (x.market || "default") === state.market) &&
       (!state.maxPrice || x.price <= Number(state.maxPrice)) &&
       (!state.level || (state.level === "buy" ? x.level === "buy" : x.level !== "deal")));
     const sorters = {
@@ -350,6 +365,8 @@
     if (x.price_limit && x.price <= x.price_limit) pills.push(`<span class="pill">Under ${kr(x.price_limit)} limit</span>`);
     const meter = disc != null && disc > 0 ? `<div class="meter" title="${disc}% under normal"><i style="width:${Math.min(100, disc * 1.6)}%"></i></div>` : "";
     const airline = x.airline_name || x.airline || "–";
+    if (x.market) pills.push(`<span class="pill">Cheapest via ${esc(mname(x.market))}</span>`);
+    const others = x.market_prices ? Object.entries(x.market_prices).filter(([m]) => m !== (x.market || "")).sort((a, b) => a[1] - b[1]).map(([m, p]) => `${esc(mname(m))} ${kr(p)}`).join(" · ") : "";
     return `<article class="card ${esc(x.level)}">
       <div class="card-top"><span>${esc(x.region_label)}</span>
         <span class="tags">${x.level === "buy" ? `<span class="tag buy">BUY BUY BUY</span>` : x.level === "hot" ? `<span class="tag hot">HOT</span>` : ""}${isNew(x) ? `<span class="tag new">NEW</span>` : ""}</span></div>
@@ -364,6 +381,7 @@
         <div><div class="k">Stops out / back</div><div class="v">${stops(x.stops_out)} / ${stops(x.stops_back)}</div></div>
         <div><div class="k">Airline</div><div class="v">${esc(airline)}</div></div>
       </div>
+      ${others ? `<div class="mkt">Other markets: ${others}</div>` : ""}
       <div class="actions">
         <a class="btn primary" href="${esc(x.links.google)}" target="_blank" rel="noopener">Google Flights</a>
         <a class="btn" href="${esc(x.links.skyscanner)}" target="_blank" rel="noopener">Skyscanner</a>
@@ -389,6 +407,7 @@
   });
   $("sort").addEventListener("change", (e) => { state.sort = e.target.value; remember(); renderDeals(); });
   $("month").addEventListener("change", (e) => { state.month = e.target.value; renderDeals(); });
+  $("market").addEventListener("change", (e) => { state.market = e.target.value; renderDeals(); });
   $("maxPrice").addEventListener("input", (e) => { state.maxPrice = e.target.value; remember(); renderDeals(); });
   $("level").addEventListener("change", (e) => { state.level = e.target.value; remember(); renderDeals(); });
   const fromHash = () => { const h = location.hash.slice(1); if (["world", "europe", "info"].includes(h)) state.tab = h; };

@@ -2,13 +2,14 @@
   "origin": "CPH",
   "currency": "dkk",
 
-  "_scan": "Which departure months to look at. 0 = this month, 9 = nine months from now. Long-haul deals usually show up 1-8 months ahead.",
+  "_scan": "Which departure months to look at. 0 = this month, 9 = nine months from now. markets = which country versions of Aviasales to check (\"\" = default for CPH). Different markets can list different agencies and prices.",
   "scan": {
     "months_from": 0,
     "months_to": 9,
     "min_days_until_departure": 7,
     "max_pages_per_month": 2,
-    "markets": [""]
+    "markets": ["", "dk", "us", "gb", "de", "se", "es"],
+    "pause_seconds": 0.6
   },
 
   "_deal_rule": "A flight is a deal if it is at least min_discount below the median price for that destination in that month, OR under the region's price limit. 'hot' = both at once.",

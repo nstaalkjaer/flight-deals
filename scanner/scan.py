@@ -124,6 +124,15 @@ def clean_token(raw: str):
                 "Travelpayouts → Profile → API token and save the secret again.")
 
 
+MARKET_NAMES = {"": "default", "dk": "Danish", "us": "US", "gb": "UK", "de": "German", "se": "Swedish",
+                "es": "Spanish", "no": "Norwegian", "fr": "French", "it": "Italian", "pl": "Polish",
+                "nl": "Dutch", "fi": "Finnish", "in": "Indian", "th": "Thai", "ru": "Russian"}
+
+
+def market_name(code) -> str:
+    return MARKET_NAMES.get((code or "").lower(), (code or "default").upper())
+
+
 def kr(amount) -> str:
     return f"{int(round(amount)):,}".replace(",", ".") + " kr"
 
@@ -229,16 +238,24 @@ def fetch_offers(cfg: dict, token: str, months: list[str], errors: list):
     origin, currency = cfg["origin"], cfg["currency"]
     max_pages = cfg["scan"].get("max_pages_per_month", 2)
     offers: dict[tuple, dict] = {}
+    by_market: dict[tuple, dict] = {}
+    market_stats: dict[str, int] = {}
     calls = 0
+    pause = cfg["scan"].get("pause_seconds", 0.4)
 
-    def add(o):
+    def add(o, market):
         if not o or o["dest"] == origin:
             return
         key = (o["dest"], o["depart"], o["return"])
+        prices = by_market.setdefault(key, {})
+        if market not in prices or o["price"] < prices[market]:
+            prices[market] = o["price"]
+        market_stats[market] = market_stats.get(market, 0) + 1
         old = offers.get(key)
         if old is None or o["price"] < old["price"]:
             if old and not o.get("link"):
                 o["link"] = old.get("link")
+            o["market"] = market
             offers[key] = o
 
     for market in cfg["scan"].get("markets") or [""]:
@@ -253,17 +270,17 @@ def fetch_offers(cfg: dict, token: str, months: list[str], errors: list):
                     }, token)
                     calls += 1
                 except Exception as e:
-                    errors.append(f"prices_for_dates {month} page {page}: {e}")
+                    errors.append(f"prices_for_dates {market or 'default'} {month} page {page}: {e}")
                     break
                 if res.get("success") is False:
-                    errors.append(f"prices_for_dates {month}: {res.get('error')}")
+                    errors.append(f"prices_for_dates {market or 'default'} {month}: {res.get('error')}")
                     break
                 rows = res.get("data") or []
                 for it in rows:
-                    add(norm_v3(it))
+                    add(norm_v3(it), market)
                 if len(rows) < 1000:
                     break
-                time.sleep(0.4)
+                time.sleep(pause)
             # 2) cheapest ticket per destination and number of stops
             for page in range(1, max_pages + 1):
                 try:
@@ -273,7 +290,7 @@ def fetch_offers(cfg: dict, token: str, months: list[str], errors: list):
                     }, token)
                     calls += 1
                 except Exception as e:
-                    errors.append(f"prices/cheap {month} page {page}: {e}")
+                    errors.append(f"prices/cheap {market or 'default'} {month} page {page}: {e}")
                     break
                 data = res.get("data") or {}
                 if not isinstance(data, dict) or not data:
@@ -281,12 +298,14 @@ def fetch_offers(cfg: dict, token: str, months: list[str], errors: list):
                 for dest, by_stops in data.items():
                     for stops_key, it in (by_stops or {}).items():
                         if isinstance(it, dict):
-                            add(norm_v1(dest, stops_key, it))
+                            add(norm_v1(dest, stops_key, it), market)
                 if len(data) < 100:
                     break
-                time.sleep(0.4)
-            time.sleep(0.4)
-    return list(offers.values()), calls
+                time.sleep(pause)
+            time.sleep(pause)
+    for key, o in offers.items():
+        o["market_prices"] = by_market.get(key, {})
+    return list(offers.values()), calls, market_stats
 
 
 # --------------------------------------------------------------------------- price history / medians
@@ -342,6 +361,7 @@ def build_links(origin: str, o: dict) -> dict:
     ymd = lambda s: s[2:4] + s[5:7] + s[8:10]
     google = "https://www.google.com/travel/flights?" + urllib.parse.urlencode({
         "q": f"Flights from {origin} to {to} on {dep} through {ret}", "curr": "DKK", "hl": "en",
+        **({"gl": o["market"].upper()} if o.get("market") else {}),
     })
     skyscanner = (f"https://www.skyscanner.dk/transport/flights/{origin.lower()}/{to.lower()}/"
                   f"{ymd(dep)}/{ymd(ret)}/?adultsv2=1&cabinclass=economy&currency=DKK")
@@ -415,6 +435,8 @@ def find_deals(cfg: dict, offers: list[dict], history: dict, places: dict, state
             "region": o["region"], "region_label": o["region_label"], "europe": o["europe"],
             "depart": o["depart"], "return": o["return"], "days": o["days"],
             "price": o["price"],
+            "market": o.get("market", ""),
+            "market_prices": o.get("market_prices") if len(o.get("market_prices") or {}) > 1 else None,
             "median": median, "samples": samples,
             "discount": round(discount, 3) if discount is not None else None,
             "price_limit": limit or None,
@@ -523,7 +545,8 @@ def send_alerts(cfg: dict, deals: list[dict], state: dict, topic: str, page_url:
         title = f"{prefix}{d['city']} {kr(d['price'])} return"
         msg = (f"CPH → {d['city']}, {d['country']}\n"
                f"{nice_date(d['depart'])} → {nice_date(d['return'])} ({d['days']} days) · {stops_text(d)}\n"
-               f"{deal_reason(d)}")
+               f"{deal_reason(d)}"
+               + (f"\nCheapest on the {market_name(d['market'])} market" if d.get("market") else ""))
         if post({"topic": topic, "title": title, "message": msg,
                  "tags": ["rotating_light" if d["level"] == "buy" else "airplane"],
                  "priority": {"buy": 5, "hot": 4}.get(d["level"], 3),
@@ -558,6 +581,7 @@ def base_output(cfg: dict, run_at: datetime, months: list[str]) -> dict:
         "origin": cfg["origin"],
         "currency": cfg["currency"].upper(),
         "months_scanned": months,
+        "markets": list(cfg["scan"].get("markets") or [""]),
         "rules": {
             "min_discount": cfg["deal_rule"]["min_discount"],
             "median_window_days": cfg["deal_rule"]["median_window_days"],
@@ -605,7 +629,7 @@ def main(run_at: datetime | None = None) -> int:
     history = load_json(HISTORY_PATH, {})
 
     places = load_places(errors)
-    raw, calls = fetch_offers(cfg, token, months, errors)
+    raw, calls, market_stats = fetch_offers(cfg, token, months, errors)
     log(f"API calls: {calls}, raw offers: {len(raw)}")
 
     if not places["cities"]:
@@ -616,7 +640,7 @@ def main(run_at: datetime | None = None) -> int:
         out["errors"] = errors[:20] + ["No prices came back this run; showing the previous deals."]
         out["deals"] = previous.get("deals", [])
         out["stale"] = True
-        out["stats"] = {"api_calls": calls, "offers_seen": 0}
+        out["stats"] = {"api_calls": calls, "offers_seen": 0, "markets": market_stats}
         save_json(OUTPUT_PATH, out)
         log("\n".join(out["errors"]))
         return 0
@@ -639,6 +663,7 @@ def main(run_at: datetime | None = None) -> int:
         "deals_europe": sum(1 for d in deals if d["europe"]),
         "deals_buy": sum(1 for d in deals if d["level"] == "buy"),
         "alerts_sent": alerts_sent,
+        "markets": market_stats,
     }
     save_json(OUTPUT_PATH, out)
     save_json(STATE_PATH, state)
