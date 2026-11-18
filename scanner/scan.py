@@ -33,6 +33,7 @@ CONFIG_PATH = ROOT / "config.json"
 STATE_PATH = ROOT / "data" / "state.json"
 HISTORY_PATH = ROOT / "data" / "history.json"
 OUTPUT_PATH = ROOT / "docs" / "deals.json"
+TRENDS_PATH = ROOT / "docs" / "trends.json"
 
 API = "https://api.travelpayouts.com"
 USER_AGENT = "cph-deal-radar/1.0 (+github actions)"
@@ -478,22 +479,56 @@ def find_deals(cfg: dict, offers: list[dict], history: dict, places: dict, state
     return deals
 
 
-def summarize_destinations(cfg: dict, offers: list[dict], deals: list[dict]) -> list[dict]:
-    """Cheapest price to every destination, deal or not, for the All prices tab."""
+def update_trends(trends: dict, offers: list[dict], today: date, keep_days: int = 180) -> dict:
+    """trends[city code][YYYY-MM-DD] = [typical price, cheapest price] that day, for the price history chart."""
+    prices: dict[str, list[int]] = {}
+    for o in offers:
+        prices.setdefault(o["dest"], []).append(o["price"])
+    t = today.isoformat()
+    for dest, ps in prices.items():
+        ps.sort()
+        trends.setdefault(dest, {})[t] = [ps[len(ps) // 2], ps[0]]
+    cutoff = (today - timedelta(days=keep_days)).isoformat()
+    for dest in list(trends):
+        trends[dest] = {d: v for d, v in trends[dest].items() if d >= cutoff}
+        if not trends[dest]:
+            del trends[dest]
+    return trends
+
+
+def trend_change(series: dict, today: date):
+    """Change in typical price vs about a week ago, e.g. -0.12 = 12% cheaper."""
+    now = series.get(today.isoformat())
+    if not now:
+        return None
+    for back in (7, 6, 8, 5, 9):
+        then = series.get((today - timedelta(days=back)).isoformat())
+        if then and then[0]:
+            return round(now[0] / then[0] - 1, 3)
+    return None
+
+
+def summarize_destinations(cfg: dict, offers: list[dict], deals: list[dict], trends: dict, today: date):
+    """Cheapest price to every destination, deal or not, for the All prices tab.
+    Also returns every date option per destination, so the page can filter by your travel window."""
     rank = {"deal": 0, "hot": 1, "buy": 2}
     deal_level = {}
     for d in deals:
         if rank.get(d["level"], 0) >= rank.get(deal_level.get(d["dest"], ""), -1):
             deal_level[d["dest"]] = d["level"]
-    best, prices = {}, {}
+    best, prices, options = {}, {}, {}
     for o in offers:
         prices.setdefault(o["dest"], []).append(o["price"])
+        options.setdefault(o["dest"], []).append([
+            o["depart"], o["return"], o["price"], o.get("stops_out"), o.get("stops_back"),
+            o.get("age_days"), o.get("market", ""), o.get("dest_airport") or o["dest"]])
         if o["dest"] not in best or o["price"] < best[o["dest"]]["price"]:
             best[o["dest"]] = o
     out = []
     for dest, o in best.items():
         ps = sorted(prices[dest])
         out.append({
+            "code": dest,
             "dest": o.get("dest_airport") or dest, "city": o["city"], "country": o["country"],
             "country_code": o["country_code"], "region_label": o["region_label"], "europe": o["europe"],
             "price": o["price"], "typical": ps[len(ps) // 2] if len(ps) >= 3 else None, "offers": len(ps),
@@ -501,10 +536,12 @@ def summarize_destinations(cfg: dict, offers: list[dict], deals: list[dict]) -> 
             "stops_out": o.get("stops_out"), "market": o.get("market", ""),
             "age_days": o.get("age_days"),
             "deal_level": deal_level.get(dest),
+            "trend_7d": trend_change(trends.get(dest) or {}, today),
             "link": build_links(cfg["origin"], o)["google"],
         })
     out.sort(key=lambda x: x["price"])
-    return out
+    opts = {k: sorted(v, key=lambda r: r[2])[:40] for k, v in options.items()}
+    return out, opts
 
 
 def prune_state(state: dict, today: date):
@@ -693,6 +730,7 @@ def main(run_at: datetime | None = None) -> int:
         out["errors"] = errors[:20] + ["No prices came back this run; showing the previous deals."]
         out["deals"] = previous.get("deals", [])
         out["destinations"] = previous.get("destinations", [])
+        out["options"] = previous.get("options", {})
         out["stale"] = True
         out["stats"] = {"api_calls": calls, "offers_seen": 0, "markets": market_stats}
         save_json(OUTPUT_PATH, out)
@@ -707,7 +745,8 @@ def main(run_at: datetime | None = None) -> int:
     prune_state(state, today)
 
     out["deals"] = deals
-    out["destinations"] = summarize_destinations(cfg, offers, deals)
+    trends = update_trends(load_json(TRENDS_PATH, {}), offers, today)
+    out["destinations"], out["options"] = summarize_destinations(cfg, offers, deals, trends, today)
     out["errors"] = errors[:20]
     out["stats"] = {
         "api_calls": calls,
@@ -723,6 +762,7 @@ def main(run_at: datetime | None = None) -> int:
     save_json(OUTPUT_PATH, out)
     save_json(STATE_PATH, state)
     save_json(HISTORY_PATH, history)
+    save_json(TRENDS_PATH, trends)
     log(json.dumps(out["stats"]))
     for e in errors[:10]:
         log("warning:", e)

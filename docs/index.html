@@ -15,6 +15,7 @@
     --text: #141a23; --muted: #5d6878; --amber: #a85f00; --amber-dim: rgba(168, 95, 0, 0.1);
     --hot: #c8381a; --hot-dim: rgba(200, 56, 26, 0.1); --good: #0f7a4a; --good-dim: rgba(15, 122, 74, 0.1);
     --link: #0b5fae; --on-amber: #ffffff;
+    --ch-typ: #0b5fae; --ch-low: #a85f00;
     --radius: 14px;
     --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -26,6 +27,7 @@
       --text: #e8edf4; --muted: #8b97a8; --amber: #ffb547; --amber-dim: rgba(255, 181, 71, 0.14);
       --hot: #ff6b4a; --hot-dim: rgba(255, 107, 74, 0.16); --good: #4ade9a; --good-dim: rgba(74, 222, 154, 0.13);
       --link: #7cc4ff; --on-amber: #1a1205;
+    --ch-typ: #3f94d8; --ch-low: #c27a12;
     }
   }
   :root[data-theme="dark"] {
@@ -34,6 +36,7 @@
     --text: #e8edf4; --muted: #8b97a8; --amber: #ffb547; --amber-dim: rgba(255, 181, 71, 0.14);
     --hot: #ff6b4a; --hot-dim: rgba(255, 107, 74, 0.16); --good: #4ade9a; --good-dim: rgba(74, 222, 154, 0.13);
     --link: #7cc4ff; --on-amber: #1a1205;
+    --ch-typ: #3f94d8; --ch-low: #c27a12;
   }
   :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   .amt, .v, td.num, .count { font-variant-numeric: tabular-nums; }
@@ -122,6 +125,29 @@
   .dprice { grid-column: 2; grid-row: 1 / span 2; align-self: center; text-align: right; font-family: var(--mono); font-weight: 700; color: var(--amber); }
   .dprice small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
   .note { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+  .tripbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 10px 12px; margin-bottom: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+  .tripbar .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text); }
+  input[type=date] { font: inherit; font-size: 13px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+  input[type=number].days { width: 64px; }
+  .linkbtn { all: unset; cursor: pointer; font-size: 13px; color: var(--link); text-decoration: underline; }
+  .star { all: unset; cursor: pointer; font-size: 17px; line-height: 1; color: var(--muted); padding: 0 2px; vertical-align: -1px; }
+  .star[aria-pressed="true"] { color: var(--amber); }
+  .ctry.fav { border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); }
+  .trend { font-family: var(--mono); font-size: 11px; font-weight: 700; }
+  .trend.down { color: var(--good); }
+  .trend.up { color: var(--muted); }
+  .dwrap { border-top: 1px solid var(--line); }
+  .ctry-head + .dwrap { border-top: 0; }
+  button.drow { width: 100%; font: inherit; text-align: left; background: none; border: 0; cursor: pointer; color: var(--text); }
+  .dmore { padding: 2px 14px 14px; display: grid; gap: 12px; }
+  .optlist { display: grid; gap: 4px; font-size: 12px; font-family: var(--mono); }
+  .optlist .k { font-family: var(--sans); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .optlist a { display: flex; justify-content: space-between; gap: 10px; color: var(--text); text-decoration: none; padding: 5px 8px; border-radius: 8px; background: var(--panel-2); }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+  .chart .tip { position: absolute; top: 26px; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 12px; line-height: 1.4; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); white-space: nowrap; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 6px; }
   .empty { text-align: center; padding: 50px 20px; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius); }
   .empty b { display: block; color: var(--text); font-size: 17px; margin-bottom: 6px; }
 
@@ -152,6 +178,16 @@
   </header>
 
   <div id="banners"></div>
+
+  <section class="tripbar" aria-label="Your trip">
+    <span class="lbl">Your trip</span>
+    <label class="field">Leave from <input type="date" id="tFrom"></label>
+    <label class="field">Back by <input type="date" id="tTo"></label>
+    <label class="field">Length <input type="number" class="days" id="tMin" min="1" max="60" placeholder="min"> – <input type="number" class="days" id="tMax" min="1" max="60" placeholder="max"> days</label>
+    <label class="toggle"><input type="checkbox" id="tDirect"> Direct only</label>
+    <label class="toggle"><input type="checkbox" id="tFav"> ★ Favourites only</label>
+    <button class="linkbtn" id="tClear" type="button" hidden>Clear</button>
+  </section>
 
   <nav class="tabs" role="tablist">
     <button role="tab" data-tab="world" aria-selected="true">World <span class="count" id="countWorld">0</span></button>
@@ -197,7 +233,7 @@
       </div>
       <label class="toggle"><input type="checkbox" id="inclEurope"> Include Europe</label>
     </div>
-    <p class="note">The cheapest return price to every destination in the last scan, deal or not. Prices seen several days ago may be gone, so check before you get excited. Outside Europe these are trips of 12 days or more. Tap a row to check it on Google Flights.</p>
+    <p class="note">The cheapest return price to every destination in the last scan, deal or not. Prices seen several days ago may be gone, so check before you get excited. Outside Europe these are trips of 12 days or more. Tap a row to see its price history and cheapest dates. Tap ☆ to make a country a favourite.</p>
     <div class="explore-list" id="exploreList"></div>
   </section>
 
@@ -242,7 +278,7 @@
 
 <script>
 (() => {
-  const state = { data: null, tab: "world", region: "all", sort: "score", month: "", maxPrice: "", level: "", market: "", q: "", exSort: "price", inclEurope: false };
+  const state = { data: null, tab: "world", region: "all", sort: "score", month: "", maxPrice: "", level: "", market: "", q: "", exSort: "price", inclEurope: false, trip: { from: "", to: "", min: "", max: "", direct: false, fav: false }, favs: [], open: "" };
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const kr = (n) => n == null ? "–" : Math.round(n).toLocaleString("da-DK") + " kr";
@@ -262,13 +298,31 @@
   const MK = { default: "Default", dk: "Denmark", us: "USA", gb: "UK", de: "Germany", se: "Sweden", es: "Spain", no: "Norway", fr: "France", it: "Italy", pl: "Poland", nl: "Netherlands", fi: "Finland", in: "India", th: "Thailand", ru: "Russia" };
   const flag = (c) => /^[a-z]{2}$/.test(c) ? String.fromCodePoint(...[...c.toUpperCase()].map((ch) => 127397 + ch.charCodeAt(0))) : "🌐";
   const mname = (c) => `${flag(c || "default")} ${MK[c || "default"] || String(c).toUpperCase()}`;
+  const tripDays = (dep, ret) => Math.round((new Date(ret + "T12:00:00Z") - new Date(dep + "T12:00:00Z")) / 86400000);
+  const tripActive = () => { const t = state.trip; return !!(t.from || t.to || t.min || t.max || t.direct || t.fav); };
+  const fitsTrip = (dep, ret, stopsOut, stopsBack) => {
+    const t = state.trip, days = tripDays(dep, ret);
+    if (t.from && dep < t.from) return false;
+    if (t.to && ret > t.to) return false;
+    if (t.min && days < Number(t.min)) return false;
+    if (t.max && days > Number(t.max)) return false;
+    if (t.direct && !(stopsOut === 0 && stopsBack === 0)) return false;
+    return true;
+  };
+  const isFav = (cc) => state.favs.includes(String(cc || "").toUpperCase());
+  const toggleFav = (cc) => {
+    cc = String(cc || "").toUpperCase();
+    state.favs = isFav(cc) ? state.favs.filter((c) => c !== cc) : [...state.favs, cc];
+    remember();
+  };
+  const gfLink = (to, dep, ret) => "https://www.google.com/travel/flights?" + new URLSearchParams({ q: `Flights from CPH to ${to} on ${dep} through ${ret}`, curr: "DKK", hl: "en" });
 
   const store = {
     get() { try { return JSON.parse(localStorage.getItem("cphDealRadar") || "{}"); } catch { return {}; } },
     set(v) { try { localStorage.setItem("cphDealRadar", JSON.stringify(v)); } catch {} },
   };
   Object.assign(state, store.get());
-  const remember = () => store.set({ sort: state.sort, maxPrice: state.maxPrice, level: state.level });
+  const remember = () => store.set({ sort: state.sort, maxPrice: state.maxPrice, level: state.level, trip: state.trip, favs: state.favs });
 
   async function load() {
     try {
@@ -341,6 +395,7 @@
     $("dealsView").hidden = view !== "deals";
     $("infoView").hidden = view !== "info";
     $("exploreView").hidden = view !== "explore";
+    document.querySelector(".tripbar").hidden = view === "info";
     document.querySelectorAll("nav.tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
     if (view === "info") return;
     if (view === "explore") return renderExplore();
@@ -369,6 +424,7 @@
       (state.region === "all" || state.tab === "europe" || x.region === state.region) &&
       (!state.month || x.depart.startsWith(state.month)) &&
       (!state.market || (x.market || "default") === state.market) &&
+      fitsTrip(x.depart, x.return, x.stops_out, x.stops_back) && (!state.trip.fav || isFav(x.country_code)) &&
       (!state.maxPrice || x.price <= Number(state.maxPrice)) &&
       (!state.level || (state.level === "buy" ? x.level === "buy" : x.level !== "deal")));
     const sorters = {
@@ -388,39 +444,148 @@
     $("grid").innerHTML = list.map(card).join("");
   }
 
+  function exploreItems() {
+    const d = state.data, opts = d.options || {};
+    const q = state.q.trim().toLowerCase();
+    const items = [];
+    for (const x of d.destinations || []) {
+      if (!state.inclEurope && x.europe) continue;
+      if (state.trip.fav && !isFav(x.country_code)) continue;
+      if (q && !`${x.city} ${x.country} ${x.region_label} ${x.dest}`.toLowerCase().includes(q)) continue;
+      let pick = x;
+      if (tripActive()) {
+        const rows = (opts[x.code] || []).filter((r) => fitsTrip(r[0], r[1], r[3], r[4]));
+        if (!rows.length) continue;
+        const r = rows[0];
+        pick = { ...x, depart: r[0], return: r[1], price: r[2], stops_out: r[3], age_days: r[5], dest: r[7], days: tripDays(r[0], r[1]), link: gfLink(r[7], r[0], r[1]) };
+      }
+      items.push(pick);
+    }
+    return items;
+  }
+
   function renderExplore() {
-    const d = state.data;
     $("q").value = state.q;
     $("exSort").value = state.exSort;
     $("inclEurope").checked = !!state.inclEurope;
-    const q = state.q.trim().toLowerCase();
-    const list = (d.destinations || []).filter((x) => (state.inclEurope || !x.europe) &&
-      (!q || `${x.city} ${x.country} ${x.region_label} ${x.dest}`.toLowerCase().includes(q)));
     const groups = new Map();
-    for (const x of list) {
+    for (const x of exploreItems()) {
       const k = x.country || x.country_code || "Other";
       if (!groups.has(k)) groups.set(k, []);
       groups.get(k).push(x);
     }
     const sorted = [...groups.entries()].map(([c, xs]) => [c, xs.sort((a, b) => a.price - b.price)])
-      .sort((a, b) => state.exSort === "name" ? a[0].localeCompare(b[0]) : a[1][0].price - b[1][0].price);
+      .sort((a, b) => (isFav(b[1][0].country_code) - isFav(a[1][0].country_code)) ||
+        (state.exSort === "name" ? a[0].localeCompare(b[0]) : a[1][0].price - b[1][0].price));
     if (!sorted.length) {
-      $("exploreList").innerHTML = `<div class="empty" style="grid-column:1/-1"><b>Nothing here</b>${q ? "No country or city matches that search." : "No prices yet. They show up after the next scan."}</div>`;
+      const why = state.q.trim() ? "No country or city matches that search." : tripActive() ? "Nothing fits your trip settings. Try wider dates or another trip length." : "No prices yet. They show up after the next scan.";
+      $("exploreList").innerHTML = `<div class="empty" style="grid-column:1/-1"><b>Nothing here</b>${why}</div>`;
       return;
     }
-    $("exploreList").innerHTML = sorted.map(([country, xs]) => `<section class="ctry">
-      <div class="ctry-head"><span>${flag(String(xs[0].country_code || "").toLowerCase())} ${esc(country)}</span><span class="from">from <b>${kr(xs[0].price)}</b></span></div>
+    $("exploreList").innerHTML = sorted.map(([country, xs]) => {
+      const cc = xs[0].country_code;
+      return `<section class="ctry${isFav(cc) ? " fav" : ""}">
+      <div class="ctry-head"><span>${starBtn(cc, country)} ${flag(String(cc || "").toLowerCase())} ${esc(country)}</span><span class="from">from <b>${kr(xs[0].price)}</b></span></div>
       ${xs.map(destRow).join("")}
-    </section>`).join("");
+    </section>`;
+    }).join("");
+    if (state.open) drawChart(state.open);
+  }
+
+  function starBtn(cc, name) {
+    const on = isFav(cc);
+    return `<button class="star" type="button" data-fav="${esc(cc)}" aria-pressed="${on}" aria-label="${on ? "Remove" : "Add"} ${esc(name)} ${on ? "from" : "to"} favourites">${on ? "★" : "☆"}</button>`;
+  }
+
+  function trendBadge(t) {
+    if (t == null || Math.abs(t) < 0.05) return "";
+    const pct = Math.round(Math.abs(t) * 100);
+    return t < 0 ? `<span class="trend down">↓ ${pct}% this week</span>` : `<span class="trend up">↑ ${pct}% this week</span>`;
   }
 
   function destRow(x) {
     const tag = x.deal_level === "buy" ? `<span class="tag buy">BUY BUY BUY</span>` : x.deal_level === "hot" ? `<span class="tag hot">HOT</span>` : x.deal_level ? `<span class="tag new">DEAL</span>` : "";
-    return `<a class="drow" href="${esc(x.link)}" target="_blank" rel="noopener">
-      <span class="dcity">${esc(x.city)}<span class="code">${esc(x.dest)}</span>${tag}</span>
-      <span class="ddates">${dmon(x.depart)} → ${dmon(x.return)} · ${x.days} d · ${stops(x.stops_out)} · seen ${ageText(x.age_days)}</span>
-      <span class="dprice">${kr(x.price)}${x.typical ? `<small>typical ${kr(x.typical)}</small>` : ""}</span>
-    </a>`;
+    const open = !!x.code && state.open === x.code;
+    const opts = ((state.data.options || {})[x.code] || []).filter((r) => fitsTrip(r[0], r[1], r[3], r[4])).slice(0, 5);
+    const optList = opts.length > 1 ? `<div class="optlist"><span class="k">Cheapest dates${tripActive() ? " for your trip" : ""}</span>${opts.map((r) => `<a href="${esc(gfLink(r[7], r[0], r[1]))}" target="_blank" rel="noopener"><span>${dmon(r[0])} → ${dmon(r[1])} · ${tripDays(r[0], r[1])} d · ${stops(r[3])}</span><b>${kr(r[2])}</b></a>`).join("")}</div>` : "";
+    return `<div class="dwrap" data-code="${esc(x.code || "")}">
+      <button class="drow" type="button" aria-expanded="${open}">
+        <span class="dcity">${esc(x.city)}<span class="code">${esc(x.dest)}</span>${tag}${trendBadge(x.trend_7d)}</span>
+        <span class="ddates">${dmon(x.depart)} → ${dmon(x.return)} · ${x.days} d · ${stops(x.stops_out)} · seen ${ageText(x.age_days)}</span>
+        <span class="dprice">${kr(x.price)}${x.typical ? `<small>typical ${kr(x.typical)}</small>` : ""}</span>
+      </button>
+      ${open ? `<div class="dmore">
+        <div class="chart" id="chart-${esc(x.code)}"><p class="note">Loading price history…</p></div>
+        ${optList}
+        <div class="actions"><a class="btn primary" href="${esc(x.link)}" target="_blank" rel="noopener">Check on Google Flights</a></div>
+      </div>` : ""}
+    </div>`;
+  }
+
+  let trendsCache = null;
+  async function loadTrends() {
+    if (trendsCache) return trendsCache;
+    try {
+      const r = await fetch("trends.json?t=" + Date.now(), { cache: "no-store" });
+      trendsCache = r.ok ? await r.json() : {};
+    } catch { trendsCache = {}; }
+    return trendsCache;
+  }
+
+  const niceStep = (raw) => {
+    const p = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
+    const m = raw / p;
+    return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p;
+  };
+
+  async function drawChart(code) {
+    const series = Object.entries((await loadTrends())[code] || {}).sort((a, b) => a[0].localeCompare(b[0]));
+    const box = document.getElementById("chart-" + code);
+    if (!box) return;
+    if (series.length < 2) {
+      box.innerHTML = `<p class="note">The price history builds up as the scanner runs (${series.length ? "1 day so far" : "nothing yet"}). Check back in a few days.</p>`;
+      return;
+    }
+    const W = 320, H = 150, L = 46, R = 10, T = 10, B = 22;
+    const ts = series.map(([d]) => new Date(d + "T12:00:00Z").getTime());
+    const vals = series.flatMap(([, v]) => [v[0], v[1]]);
+    const step = niceStep((Math.max(...vals) - Math.min(...vals) || 500) / 3);
+    const lo = Math.max(0, Math.floor((Math.min(...vals) - step / 2) / step) * step);
+    const hi = Math.ceil((Math.max(...vals) + step / 2) / step) * step;
+    const x = (t) => L + (t - ts[0]) / Math.max(1, ts[ts.length - 1] - ts[0]) * (W - L - R);
+    const y = (v) => T + (hi - v) / (hi - lo) * (H - T - B);
+    const path = (i) => series.map(([, v], k) => `${k ? "L" : "M"}${x(ts[k]).toFixed(1)},${y(v[i]).toFixed(1)}`).join("");
+    const ticks = [];
+    for (let v = lo; v <= hi + 0.5; v += step) ticks.push(v);
+    const last = series.length - 1, now = series[last][1];
+    box.innerHTML = `<div class="legend"><span><i style="background:var(--ch-typ)"></i>Typical ${kr(now[0])}</span><span><i style="background:var(--ch-low)"></i>Cheapest ${kr(now[1])}</span></div>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Price history: typical and cheapest price per day">
+        ${ticks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">${Math.round(v).toLocaleString("da-DK")}</text>`).join("")}
+        <text x="${L}" y="${H - 6}" font-size="10" fill="var(--muted)">${dmon(series[0][0])}</text>
+        <text x="${W - R}" y="${H - 6}" font-size="10" fill="var(--muted)" text-anchor="end">${dmon(series[last][0])}</text>
+        <path d="${path(0)}" fill="none" stroke="var(--ch-typ)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="${path(1)}" fill="none" stroke="var(--ch-low)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        <circle cx="${x(ts[last]).toFixed(1)}" cy="${y(now[0]).toFixed(1)}" r="4" fill="var(--ch-typ)" stroke="var(--panel)" stroke-width="2"/>
+        <circle cx="${x(ts[last]).toFixed(1)}" cy="${y(now[1]).toFixed(1)}" r="4" fill="var(--ch-low)" stroke="var(--panel)" stroke-width="2"/>
+        <line class="xh" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>
+        <rect x="${L}" y="0" width="${W - L - R}" height="${H}" fill="transparent"/>
+      </svg><div class="tip" hidden></div>`;
+    const svg = box.querySelector("svg"), tip = box.querySelector(".tip"), xh = box.querySelector(".xh");
+    const show = (ev) => {
+      const rect = svg.getBoundingClientRect();
+      const px = (ev.clientX - rect.left) / rect.width * W;
+      let k = 0, best = Infinity;
+      ts.forEach((t, i) => { const dd = Math.abs(x(t) - px); if (dd < best) { best = dd; k = i; } });
+      const [day, v] = series[k];
+      xh.setAttribute("x1", x(ts[k])); xh.setAttribute("x2", x(ts[k])); xh.setAttribute("visibility", "visible");
+      tip.innerHTML = `<b>${dmon(day)}</b><br>Typical ${kr(v[0])}<br>Cheapest ${kr(v[1])}`;
+      tip.hidden = false;
+      const left = x(ts[k]) / W * rect.width;
+      tip.style.left = Math.min(Math.max(0, left - 60), Math.max(0, rect.width - 130)) + "px";
+    };
+    svg.addEventListener("pointermove", show);
+    svg.addEventListener("pointerdown", show);
+    svg.addEventListener("pointerleave", () => { tip.hidden = true; xh.setAttribute("visibility", "hidden"); });
   }
 
   function card(x) {
@@ -437,7 +602,7 @@
       <div class="card-top"><span>${esc(x.region_label)}</span>
         <span class="tags">${x.level === "buy" ? `<span class="tag buy">BUY BUY BUY</span>` : x.level === "hot" ? `<span class="tag hot">HOT</span>` : ""}${isNew(x) ? `<span class="tag new">NEW</span>` : ""}</span></div>
       <div class="dest">
-        <div><div class="city">${esc(x.city)}<span class="code">${esc(x.dest_airport || x.dest)}</span></div><div class="country">${esc(x.country)}</div></div>
+        <div><div class="city">${esc(x.city)}<span class="code">${esc(x.dest_airport || x.dest)}</span></div><div class="country">${esc(x.country)} ${starBtn(x.country_code, x.country)}</div></div>
         <div class="price"><div class="amt">${kr(x.price)}</div><div class="unit">return</div></div>
       </div>
       <div class="why">${pills.join("")}</div>${meter}
@@ -452,6 +617,7 @@
         <a class="btn primary" href="${esc(x.links.google)}" target="_blank" rel="noopener">Google Flights</a>
         <a class="btn" href="${esc(x.links.skyscanner)}" target="_blank" rel="noopener">Skyscanner</a>
         <a class="btn" href="${esc(x.links.aviasales)}" target="_blank" rel="noopener">Aviasales</a>
+        <button class="btn" type="button" data-history="${esc(x.dest)}">Price history</button>
       </div>
       <div class="seen">Price seen ${ageText(x.age_days)} · on this list since ${ago(x.first_seen)}</div>
     </article>`;
@@ -479,6 +645,37 @@
   $("inclEurope").addEventListener("change", (e) => { state.inclEurope = e.target.checked; renderExplore(); });
   $("maxPrice").addEventListener("input", (e) => { state.maxPrice = e.target.value; remember(); renderDeals(); });
   $("level").addEventListener("change", (e) => { state.level = e.target.value; remember(); renderDeals(); });
+  document.addEventListener("click", (e) => {
+    const f = e.target.closest("[data-fav]");
+    if (f) { e.preventDefault(); toggleFav(f.dataset.fav); renderDeals(); return; }
+    const h = e.target.closest("[data-history]");
+    if (h) {
+      state.tab = "explore"; state.open = h.dataset.history; state.q = "";
+      if ((state.data.destinations || []).some((x) => x.code === state.open && x.europe)) state.inclEurope = true;
+      try { history.replaceState(null, "", "#explore"); } catch {}
+      renderDeals();
+      const el = document.querySelector(`.dwrap[data-code="${CSS.escape(state.open)}"]`);
+      if (el) el.scrollIntoView({ block: "center" });
+      return;
+    }
+    const r = e.target.closest("button.drow");
+    if (r) {
+      const code = r.closest(".dwrap").dataset.code;
+      state.open = state.open === code ? "" : code;
+      renderExplore();
+    }
+  });
+  const syncTrip = () => {
+    const t = state.trip;
+    $("tFrom").value = t.from || ""; $("tTo").value = t.to || ""; $("tMin").value = t.min || ""; $("tMax").value = t.max || "";
+    $("tDirect").checked = !!t.direct; $("tFav").checked = !!t.fav; $("tClear").hidden = !tripActive();
+  };
+  [["tFrom", "from"], ["tTo", "to"], ["tMin", "min"], ["tMax", "max"]].forEach(([id, k]) =>
+    $(id).addEventListener("input", (e) => { state.trip[k] = e.target.value; remember(); syncTrip(); renderDeals(); }));
+  $("tDirect").addEventListener("change", (e) => { state.trip.direct = e.target.checked; remember(); syncTrip(); renderDeals(); });
+  $("tFav").addEventListener("change", (e) => { state.trip.fav = e.target.checked; remember(); syncTrip(); renderDeals(); });
+  $("tClear").addEventListener("click", () => { state.trip = { from: "", to: "", min: "", max: "", direct: false, fav: false }; remember(); syncTrip(); renderDeals(); });
+  syncTrip();
   const fromHash = () => { const h = location.hash.slice(1); if (["world", "europe", "explore", "info"].includes(h)) state.tab = h; };
   window.addEventListener("hashchange", () => { fromHash(); renderDeals(); });
   fromHash();
