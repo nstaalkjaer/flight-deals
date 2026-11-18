@@ -198,6 +198,12 @@ def _day(s) -> str:
     return (s or "")[:10]
 
 
+def _found_from_link(link):
+    """Aviasales links carry search_date=DDMMYYYY: the day someone actually saw this price."""
+    m = re.search(r"search_date=(\d{2})(\d{2})(\d{4})", link or "")
+    return f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else None
+
+
 def norm_v3(item: dict):
     dest, dep, ret = item.get("destination"), _day(item.get("departure_at")), _day(item.get("return_at"))
     if not (dest and dep and ret and item.get("price")):
@@ -212,6 +218,7 @@ def norm_v3(item: dict):
         "stops_back": item.get("return_transfers"),
         "airline": item.get("airline"),
         "link": item.get("link"),
+        "found": _found_from_link(item.get("link")),
     }
 
 
@@ -219,6 +226,9 @@ def norm_v1(dest: str, stops_key, item: dict):
     dep, ret = _day(item.get("departure_at")), _day(item.get("return_at"))
     if not (dest and dep and ret and item.get("price")):
         return None
+    expires = (item.get("expires_at") or "")[:19]
+    if expires and expires < datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"):
+        return None  # Travelpayouts says expired prices should not be used
     stops = int(stops_key) if str(stops_key).isdigit() else None
     return {
         "dest": dest,
@@ -230,6 +240,7 @@ def norm_v1(dest: str, stops_key, item: dict):
         "stops_back": None,
         "airline": item.get("airline"),
         "link": None,
+        "found": None,
     }
 
 
@@ -252,9 +263,9 @@ def fetch_offers(cfg: dict, token: str, months: list[str], errors: list):
             prices[market] = o["price"]
         market_stats[market] = market_stats.get(market, 0) + 1
         old = offers.get(key)
-        if old is None or o["price"] < old["price"]:
-            if old and not o.get("link"):
-                o["link"] = old.get("link")
+        # a price with a known search date beats one without; otherwise the cheaper one wins
+        if (old is None or (o.get("found") and not old.get("found"))
+                or (bool(o.get("found")) == bool(old.get("found")) and o["price"] < old["price"])):
             o["market"] = market
             offers[key] = o
 
@@ -397,8 +408,9 @@ def filter_offers(cfg: dict, offers: list[dict], places: dict, today: date) -> l
             continue
         if any(s is not None and s > max_stops for s in (o.get("stops_out"), o.get("stops_back"))):
             continue
+        age = (today - date.fromisoformat(o["found"])).days if o.get("found") else None
         o.update(city=name, country=country, country_code=cc, region=region,
-                 region_label=reg.get("label", region), europe=bool(reg.get("europe")), days=days)
+                 region_label=reg.get("label", region), europe=bool(reg.get("europe")), days=days, age_days=age)
         kept.append(o)
     return kept
 
@@ -408,7 +420,10 @@ def find_deals(cfg: dict, offers: list[dict], history: dict, places: dict, state
     regions = cfg["regions"]
     seen = state.setdefault("seen", {})
     candidates = []
+    max_age = rule.get("max_price_age_days", 2)
     for o in offers:
+        if o.get("age_days") is None or o["age_days"] > max_age:
+            continue  # too old (or unknown age) to trust as a deal
         reg = regions.get(o["region"]) or regions["other"]
         limit = reg.get("price_limit") or 0
         median, samples = period_median(history, f"{o['dest']}|{o['depart'][:7]}")
@@ -444,6 +459,7 @@ def find_deals(cfg: dict, offers: list[dict], history: dict, places: dict, state
             "stops_out": o.get("stops_out"), "stops_back": o.get("stops_back"),
             "airline": o.get("airline"), "airline_name": places["airlines"].get(o.get("airline") or "", None),
             "first_seen": seen[deal_id],
+            "found": o.get("found"), "age_days": o.get("age_days"),
             "links": build_links(cfg["origin"], o),
         })
 
@@ -483,6 +499,7 @@ def summarize_destinations(cfg: dict, offers: list[dict], deals: list[dict]) -> 
             "price": o["price"], "typical": ps[len(ps) // 2] if len(ps) >= 3 else None, "offers": len(ps),
             "depart": o["depart"], "return": o["return"], "days": o["days"],
             "stops_out": o.get("stops_out"), "market": o.get("market", ""),
+            "age_days": o.get("age_days"),
             "deal_level": deal_level.get(dest),
             "link": build_links(cfg["origin"], o)["google"],
         })
@@ -504,6 +521,12 @@ def stops_text(d: dict) -> str:
     if s is None:
         return "stops unknown"
     return "direct" if s == 0 else f"{s} stop{'s' if s > 1 else ''}"
+
+
+def age_text(days) -> str:
+    if days is None:
+        return "at an unknown time"
+    return "today" if days == 0 else "yesterday" if days == 1 else f"{days} days ago"
 
 
 def deal_reason(d: dict) -> str:
@@ -528,7 +551,8 @@ def send_alerts(cfg: dict, deals: list[dict], state: dict, topic: str, page_url:
     min_rank = rank.get(a.get("min_level", "deal"), 0)
     eligible = [d for d in deals
                 if (a.get("include_europe") or not d["europe"])
-                and rank.get(d["level"], 0) >= min_rank]
+                and rank.get(d["level"], 0) >= min_rank
+                and d.get("age_days") is not None and d["age_days"] <= a.get("max_price_age_days", 1)]
     fresh = [d for d in eligible
              if d["id"] not in alerted
              or d["price"] <= alerted[d["id"]]["price"] * (1 - drop)
@@ -573,7 +597,7 @@ def send_alerts(cfg: dict, deals: list[dict], state: dict, topic: str, page_url:
         title = f"{prefix}{d['city']} {kr(d['price'])} return"
         msg = (f"CPH → {d['city']}, {d['country']}\n"
                f"{nice_date(d['depart'])} → {nice_date(d['return'])} ({d['days']} days) · {stops_text(d)}\n"
-               f"{deal_reason(d)}"
+               f"{deal_reason(d)} · price seen {age_text(d.get('age_days'))}"
                + (f"\nCheapest on the {market_name(d['market'])} market" if d.get("market") else ""))
         if post({"topic": topic, "title": title, "message": msg,
                  "tags": ["rotating_light" if d["level"] == "buy" else "airplane"],
@@ -617,6 +641,7 @@ def base_output(cfg: dict, run_at: datetime, months: list[str]) -> dict:
             "max_stops_each_way": cfg["deal_rule"].get("max_stops_each_way"),
             "buy_min_discount": cfg["deal_rule"].get("buy_min_discount", 0.45),
             "buy_max_share_of_limit": cfg["deal_rule"].get("buy_max_share_of_limit", 0.6),
+            "max_price_age_days": cfg["deal_rule"].get("max_price_age_days", 2),
         },
         "regions": [
             {"key": k, "label": v.get("label", k), "price_limit": v.get("price_limit") or None,

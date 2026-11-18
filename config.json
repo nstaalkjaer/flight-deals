@@ -12,7 +12,7 @@
     "pause_seconds": 0.6
   },
 
-  "_deal_rule": "A flight is a deal if it is at least min_discount below the median price for that destination in that month, OR under the region's price limit. 'hot' = both at once.",
+  "_deal_rule": "A flight is a deal if it is at least min_discount below the median price for that destination in that month, OR under the region's price limit. 'hot' = both at once. Only prices someone searched within max_price_age_days count, because older cached prices are usually gone.",
   "deal_rule": {
     "min_discount": 0.30,
     "min_samples_for_median": 6,
@@ -20,7 +20,8 @@
     "max_stops_each_way": 2,
     "max_deals_per_destination": 3,
     "buy_min_discount": 0.45,
-    "buy_max_share_of_limit": 0.60
+    "buy_max_share_of_limit": 0.60,
+    "max_price_age_days": 2
   },
 
   "_exclude_countries": "Countries you never want to see (ISO codes). TR = Turkey.",
@@ -51,6 +52,7 @@
     "include_europe": false,
     "max_per_run": 5,
     "realert_if_price_drops": 0.05,
+    "max_price_age_days": 1,
     "ntfy_server": "https://ntfy.sh"
   },
 

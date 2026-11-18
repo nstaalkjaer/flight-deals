@@ -197,7 +197,7 @@
       </div>
       <label class="toggle"><input type="checkbox" id="inclEurope"> Include Europe</label>
     </div>
-    <p class="note">The cheapest return price to every destination in the last scan, deal or not. Outside Europe these are trips of 12 days or more. Tap a row to check it on Google Flights.</p>
+    <p class="note">The cheapest return price to every destination in the last scan, deal or not. Prices seen several days ago may be gone, so check before you get excited. Outside Europe these are trips of 12 days or more. Tap a row to check it on Google Flights.</p>
     <div class="explore-list" id="exploreList"></div>
   </section>
 
@@ -256,6 +256,7 @@
     if (h < 48) return `${h} h ago`;
     return `${Math.round(h / 24)} days ago`;
   };
+  const ageText = (n) => n == null ? "at an unknown time" : n === 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`;
   const isNew = (d) => d.first_seen && (Date.now() - new Date(d.first_seen).getTime()) < 24 * 3600 * 1000;
   const stops = (n) => n == null ? "?" : n === 0 ? "direct" : `${n} stop${n > 1 ? "s" : ""}`;
   const MK = { default: "Default", dk: "Denmark", us: "USA", gb: "UK", de: "Germany", se: "Sweden", es: "Spain", no: "Norway", fr: "France", it: "Italy", pl: "Poland", nl: "Netherlands", fi: "Finland", in: "India", th: "Thailand", ru: "Russia" };
@@ -319,7 +320,7 @@
 
     // info tab
     const r = d.rules || {};
-    $("ruleText").innerHTML = `A flight is a deal when it's at least <b>${Math.round((r.min_discount || 0.3) * 100)}% under the median price</b> for that destination in that month (median over the last ${r.median_window_days || 30} days of scans), <b>or</b> it's under the price limit for its region.`;
+    $("ruleText").innerHTML = `A flight is a deal when it's at least <b>${Math.round((r.min_discount || 0.3) * 100)}% under the median price</b> for that destination in that month (median over the last ${r.median_window_days || 30} days of scans), <b>or</b> it's under the price limit for its region. Only prices someone searched in the last ${r.max_price_age_days ?? 2} days count, because older cached prices are usually gone.`;
     $("maxStops").textContent = r.max_stops_each_way ?? 2;
     $("buyText").innerHTML = `<b>BUY BUY BUY</b> means it's at least ${Math.round((r.buy_min_discount || 0.45) * 100)}% under the median, or at most ${Math.round((r.buy_max_share_of_limit || 0.6) * 100)}% of the region's price limit. Only these send phone alerts.`;
     $("regionRows").innerHTML = (d.regions || []).filter((g) => g.key !== "other").map((g) =>
@@ -417,7 +418,7 @@
     const tag = x.deal_level === "buy" ? `<span class="tag buy">BUY BUY BUY</span>` : x.deal_level === "hot" ? `<span class="tag hot">HOT</span>` : x.deal_level ? `<span class="tag new">DEAL</span>` : "";
     return `<a class="drow" href="${esc(x.link)}" target="_blank" rel="noopener">
       <span class="dcity">${esc(x.city)}<span class="code">${esc(x.dest)}</span>${tag}</span>
-      <span class="ddates">${dmon(x.depart)} → ${dmon(x.return)} · ${x.days} d · ${stops(x.stops_out)}</span>
+      <span class="ddates">${dmon(x.depart)} → ${dmon(x.return)} · ${x.days} d · ${stops(x.stops_out)} · seen ${ageText(x.age_days)}</span>
       <span class="dprice">${kr(x.price)}${x.typical ? `<small>typical ${kr(x.typical)}</small>` : ""}</span>
     </a>`;
   }
@@ -452,7 +453,7 @@
         <a class="btn" href="${esc(x.links.skyscanner)}" target="_blank" rel="noopener">Skyscanner</a>
         <a class="btn" href="${esc(x.links.aviasales)}" target="_blank" rel="noopener">Aviasales</a>
       </div>
-      <div class="seen">First seen ${ago(x.first_seen)}</div>
+      <div class="seen">Price seen ${ageText(x.age_days)} · on this list since ${ago(x.first_seen)}</div>
     </article>`;
   }
 
