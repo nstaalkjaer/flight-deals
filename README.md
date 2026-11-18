@@ -20,6 +20,8 @@ The best of the best are marked 💰 **BUY BUY BUY**: at least **45% under the m
 
 Trips outside Europe must be 12–35 days. Europe has its own tab with 3–21 day trips, and Europe deals don't send phone alerts. Layovers are fine, up to 2 each way.
 
+The **All prices** tab shows the cheapest price to every destination, deal or not, grouped by country.
+
 Turkey is left out completely (`exclude_countries` in `config.json`). The UK, Norway, Iceland, Switzerland and the Balkans are in the Europe tab.
 
 You can change all of this in `config.json`. To move a country into a different region, edit `scanner/regions.py`.

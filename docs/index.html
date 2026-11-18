@@ -70,8 +70,9 @@
   .chip { all: unset; cursor: pointer; white-space: nowrap; font-size: 13px; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); }
   .chip[aria-pressed="true"] { border-color: var(--amber); color: var(--text); background: var(--amber-dim); }
   .field { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
-  select, input[type=number] { font: inherit; font-size: 13px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; }
+  select, input[type=number], input[type=search] { font: inherit; font-size: 13px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; }
   input[type=number] { width: 96px; font-family: var(--mono); }
+  input[type=search] { width: 220px; }
   label.toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
   label.toggle input { accent-color: var(--hot); width: 16px; height: 16px; }
 
@@ -108,6 +109,19 @@
   .seen { font-size: 11px; color: var(--muted); }
   .mkt { font-size: 12px; color: var(--muted); }
 
+  .explore-list { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
+  .ctry { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .ctry-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 11px 14px; font-weight: 600; border-bottom: 1px solid var(--line); }
+  .ctry-head .from { font-size: 12px; color: var(--muted); font-weight: 400; white-space: nowrap; }
+  .ctry-head .from b { font-family: var(--mono); color: var(--amber); font-size: 14px; }
+  .drow { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 9px 14px; text-decoration: none; color: var(--text); border-top: 1px solid var(--line); }
+  .ctry-head + .drow { border-top: 0; }
+  .drow:hover { background: var(--panel-2); }
+  .dcity { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .ddates { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .dprice { grid-column: 2; grid-row: 1 / span 2; align-self: center; text-align: right; font-family: var(--mono); font-weight: 700; color: var(--amber); }
+  .dprice small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
+  .note { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
   .empty { text-align: center; padding: 50px 20px; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius); }
   .empty b { display: block; color: var(--text); font-size: 17px; margin-bottom: 6px; }
 
@@ -142,6 +156,7 @@
   <nav class="tabs" role="tablist">
     <button role="tab" data-tab="world" aria-selected="true">World <span class="count" id="countWorld">0</span></button>
     <button role="tab" data-tab="europe" aria-selected="false">Europe <span class="count" id="countEurope">0</span></button>
+    <button role="tab" data-tab="explore" aria-selected="false">All prices <span class="count" id="countExplore">0</span></button>
     <button role="tab" data-tab="info" aria-selected="false">How it works</button>
   </nav>
 
@@ -172,6 +187,18 @@
       </div>
     </div>
     <div class="grid" id="grid"></div>
+  </section>
+
+  <section id="exploreView" hidden>
+    <div class="controls">
+      <div class="field"><input type="search" id="q" placeholder="Search country or city" aria-label="Search country or city"></div>
+      <div class="field">Sort
+        <select id="exSort"><option value="price">Cheapest first</option><option value="name">A–Z</option></select>
+      </div>
+      <label class="toggle"><input type="checkbox" id="inclEurope"> Include Europe</label>
+    </div>
+    <p class="note">The cheapest return price to every destination in the last scan, deal or not. Outside Europe these are trips of 12 days or more. Tap a row to check it on Google Flights.</p>
+    <div class="explore-list" id="exploreList"></div>
   </section>
 
   <section id="infoView" hidden>
@@ -215,7 +242,7 @@
 
 <script>
 (() => {
-  const state = { data: null, tab: "world", region: "all", sort: "score", month: "", maxPrice: "", level: "", market: "" };
+  const state = { data: null, tab: "world", region: "all", sort: "score", month: "", maxPrice: "", level: "", market: "", q: "", exSort: "price", inclEurope: false };
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const kr = (n) => n == null ? "–" : Math.round(n).toLocaleString("da-DK") + " kr";
@@ -268,6 +295,7 @@
     const world = deals.filter((x) => !x.europe), europe = deals.filter((x) => x.europe);
     $("countWorld").textContent = world.length;
     $("countEurope").textContent = europe.length;
+    $("countExplore").textContent = (d.destinations || []).filter((x) => !x.europe).length;
     const months = d.months_scanned || [];
     $("sub").textContent = !d.generated_at ? "Waiting for the first scan"
       : `Updated ${ago(d.generated_at)}${months.length ? " · " + monthName(months[0]) + " – " + monthName(months[months.length - 1]) : ""}`;
@@ -308,11 +336,13 @@
   function renderDeals() {
     const d = state.data;
     if (!d) return;
-    const showInfo = state.tab === "info";
-    $("dealsView").hidden = showInfo;
-    $("infoView").hidden = !showInfo;
+    const view = state.tab === "info" ? "info" : state.tab === "explore" ? "explore" : "deals";
+    $("dealsView").hidden = view !== "deals";
+    $("infoView").hidden = view !== "info";
+    $("exploreView").hidden = view !== "explore";
     document.querySelectorAll("nav.tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
-    if (showInfo) return;
+    if (view === "info") return;
+    if (view === "explore") return renderExplore();
 
     const inTab = (d.deals || []).filter((x) => state.tab === "europe" ? x.europe : !x.europe);
 
@@ -355,6 +385,41 @@
       return;
     }
     $("grid").innerHTML = list.map(card).join("");
+  }
+
+  function renderExplore() {
+    const d = state.data;
+    $("q").value = state.q;
+    $("exSort").value = state.exSort;
+    $("inclEurope").checked = !!state.inclEurope;
+    const q = state.q.trim().toLowerCase();
+    const list = (d.destinations || []).filter((x) => (state.inclEurope || !x.europe) &&
+      (!q || `${x.city} ${x.country} ${x.region_label} ${x.dest}`.toLowerCase().includes(q)));
+    const groups = new Map();
+    for (const x of list) {
+      const k = x.country || x.country_code || "Other";
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(x);
+    }
+    const sorted = [...groups.entries()].map(([c, xs]) => [c, xs.sort((a, b) => a.price - b.price)])
+      .sort((a, b) => state.exSort === "name" ? a[0].localeCompare(b[0]) : a[1][0].price - b[1][0].price);
+    if (!sorted.length) {
+      $("exploreList").innerHTML = `<div class="empty" style="grid-column:1/-1"><b>Nothing here</b>${q ? "No country or city matches that search." : "No prices yet. They show up after the next scan."}</div>`;
+      return;
+    }
+    $("exploreList").innerHTML = sorted.map(([country, xs]) => `<section class="ctry">
+      <div class="ctry-head"><span>${flag(String(xs[0].country_code || "").toLowerCase())} ${esc(country)}</span><span class="from">from <b>${kr(xs[0].price)}</b></span></div>
+      ${xs.map(destRow).join("")}
+    </section>`).join("");
+  }
+
+  function destRow(x) {
+    const tag = x.deal_level === "buy" ? `<span class="tag buy">BUY BUY BUY</span>` : x.deal_level === "hot" ? `<span class="tag hot">HOT</span>` : x.deal_level ? `<span class="tag new">DEAL</span>` : "";
+    return `<a class="drow" href="${esc(x.link)}" target="_blank" rel="noopener">
+      <span class="dcity">${esc(x.city)}<span class="code">${esc(x.dest)}</span>${tag}</span>
+      <span class="ddates">${dmon(x.depart)} → ${dmon(x.return)} · ${x.days} d · ${stops(x.stops_out)}</span>
+      <span class="dprice">${kr(x.price)}${x.typical ? `<small>typical ${kr(x.typical)}</small>` : ""}</span>
+    </a>`;
   }
 
   function card(x) {
@@ -408,9 +473,12 @@
   $("sort").addEventListener("change", (e) => { state.sort = e.target.value; remember(); renderDeals(); });
   $("month").addEventListener("change", (e) => { state.month = e.target.value; renderDeals(); });
   $("market").addEventListener("change", (e) => { state.market = e.target.value; renderDeals(); });
+  $("q").addEventListener("input", (e) => { state.q = e.target.value; renderExplore(); });
+  $("exSort").addEventListener("change", (e) => { state.exSort = e.target.value; renderExplore(); });
+  $("inclEurope").addEventListener("change", (e) => { state.inclEurope = e.target.checked; renderExplore(); });
   $("maxPrice").addEventListener("input", (e) => { state.maxPrice = e.target.value; remember(); renderDeals(); });
   $("level").addEventListener("change", (e) => { state.level = e.target.value; remember(); renderDeals(); });
-  const fromHash = () => { const h = location.hash.slice(1); if (["world", "europe", "info"].includes(h)) state.tab = h; };
+  const fromHash = () => { const h = location.hash.slice(1); if (["world", "europe", "explore", "info"].includes(h)) state.tab = h; };
   window.addEventListener("hashchange", () => { fromHash(); renderDeals(); });
   fromHash();
 

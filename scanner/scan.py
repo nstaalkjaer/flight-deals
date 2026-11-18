@@ -462,6 +462,34 @@ def find_deals(cfg: dict, offers: list[dict], history: dict, places: dict, state
     return deals
 
 
+def summarize_destinations(cfg: dict, offers: list[dict], deals: list[dict]) -> list[dict]:
+    """Cheapest price to every destination, deal or not, for the All prices tab."""
+    rank = {"deal": 0, "hot": 1, "buy": 2}
+    deal_level = {}
+    for d in deals:
+        if rank.get(d["level"], 0) >= rank.get(deal_level.get(d["dest"], ""), -1):
+            deal_level[d["dest"]] = d["level"]
+    best, prices = {}, {}
+    for o in offers:
+        prices.setdefault(o["dest"], []).append(o["price"])
+        if o["dest"] not in best or o["price"] < best[o["dest"]]["price"]:
+            best[o["dest"]] = o
+    out = []
+    for dest, o in best.items():
+        ps = sorted(prices[dest])
+        out.append({
+            "dest": o.get("dest_airport") or dest, "city": o["city"], "country": o["country"],
+            "country_code": o["country_code"], "region_label": o["region_label"], "europe": o["europe"],
+            "price": o["price"], "typical": ps[len(ps) // 2] if len(ps) >= 3 else None, "offers": len(ps),
+            "depart": o["depart"], "return": o["return"], "days": o["days"],
+            "stops_out": o.get("stops_out"), "market": o.get("market", ""),
+            "deal_level": deal_level.get(dest),
+            "link": build_links(cfg["origin"], o)["google"],
+        })
+    out.sort(key=lambda x: x["price"])
+    return out
+
+
 def prune_state(state: dict, today: date):
     t = today.isoformat()
     for bucket in ("seen", "alerted"):
@@ -639,6 +667,7 @@ def main(run_at: datetime | None = None) -> int:
     if not raw:
         out["errors"] = errors[:20] + ["No prices came back this run; showing the previous deals."]
         out["deals"] = previous.get("deals", [])
+        out["destinations"] = previous.get("destinations", [])
         out["stale"] = True
         out["stats"] = {"api_calls": calls, "offers_seen": 0, "markets": market_stats}
         save_json(OUTPUT_PATH, out)
@@ -653,6 +682,7 @@ def main(run_at: datetime | None = None) -> int:
     prune_state(state, today)
 
     out["deals"] = deals
+    out["destinations"] = summarize_destinations(cfg, offers, deals)
     out["errors"] = errors[:20]
     out["stats"] = {
         "api_calls": calls,
