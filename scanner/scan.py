@@ -544,6 +544,70 @@ def summarize_destinations(cfg: dict, offers: list[dict], deals: list[dict], tre
     return out, opts
 
 
+def match_saved_trips(cfg: dict, offers: list[dict]) -> list[dict]:
+    """Prices that fit each saved trip in config.json (countries or cities, dates, trip length)."""
+    out = []
+    for t in cfg.get("saved_trips") or []:
+        countries = {c.upper() for c in t.get("countries") or []}
+        cities = {c.upper() for c in t.get("destinations") or []}
+        hits = []
+        for o in offers:
+            in_place = ((o.get("country_code") or "").upper() in countries) or (o["dest"].upper() in cities)
+            if not in_place:
+                continue
+            if (t.get("leave_from") and o["depart"] < t["leave_from"]) or (t.get("leave_by") and o["depart"] > t["leave_by"]):
+                continue
+            if t.get("back_by") and o["return"] > t["back_by"]:
+                continue
+            if (t.get("min_days") and o["days"] < t["min_days"]) or (t.get("max_days") and o["days"] > t["max_days"]):
+                continue
+            if t.get("max_price") and o["price"] > t["max_price"]:
+                continue
+            hits.append(o)
+        hits.sort(key=lambda o: o["price"])
+        as_row = lambda o: {
+            "city": o["city"], "country": o["country"], "code": o["dest"], "dest": o.get("dest_airport") or o["dest"],
+            "depart": o["depart"], "return": o["return"], "days": o["days"], "price": o["price"],
+            "stops_out": o.get("stops_out"), "stops_back": o.get("stops_back"), "age_days": o.get("age_days"),
+            "link": build_links(cfg["origin"], o)["google"]}
+        fresh = [o for o in hits if o.get("age_days") is not None and o["age_days"] <= 1]
+        out.append({
+            "name": t.get("name") or "Saved trip", "countries": sorted(countries), "destinations": sorted(cities),
+            "leave_from": t.get("leave_from"), "leave_by": t.get("leave_by"), "back_by": t.get("back_by"),
+            "min_days": t.get("min_days"), "max_days": t.get("max_days"), "max_price": t.get("max_price"),
+            "alert": bool(t.get("alert")), "count": len(hits),
+            "matches": [as_row(o) for o in hits[:5]],
+            "best_fresh": as_row(fresh[0]) if fresh else None,
+        })
+    return out
+
+
+def saved_trip_alerts(cfg: dict, saved: list[dict], state: dict, topic: str, run_at: datetime, errors: list) -> int:
+    """One alert when a saved trip gets a new cheapest fresh price (3%+ below the last one we alerted)."""
+    if not topic:
+        return 0
+    server = ((cfg.get("alerts") or {}).get("ntfy_server") or "https://ntfy.sh").rstrip("/") + "/"
+    done = state.setdefault("saved_alerted", {})
+    sent = 0
+    for t in saved:
+        best = t.get("best_fresh")
+        if not (t["alert"] and best):
+            continue
+        prev = done.get(t["name"])
+        if prev and best["price"] >= prev * 0.97:
+            continue
+        msg = (f"{best['city']}, {best['country']}: {nice_date(best['depart'])} → {nice_date(best['return'])} "
+               f"({best['days']} days) · {stops_text(best)}\nPrice seen {age_text(best.get('age_days'))}")
+        try:
+            http_post_json(server, {"topic": topic, "title": f"⭐ {t['name']}: {kr(best['price'])}",
+                                    "message": msg, "tags": ["star"], "priority": 4, "click": best["link"]})
+            done[t["name"]] = best["price"]
+            sent += 1
+        except Exception as e:
+            errors.append(f"ntfy alert failed: {e}")
+    return sent
+
+
 def prune_state(state: dict, today: date):
     t = today.isoformat()
     for bucket in ("seen", "alerted"):
@@ -730,6 +794,7 @@ def main(run_at: datetime | None = None) -> int:
         out["errors"] = errors[:20] + ["No prices came back this run; showing the previous deals."]
         out["deals"] = previous.get("deals", [])
         out["destinations"] = previous.get("destinations", [])
+        out["saved_trips"] = previous.get("saved_trips", [])
         out["options"] = previous.get("options", {})
         out["stale"] = True
         out["stats"] = {"api_calls": calls, "offers_seen": 0, "markets": market_stats}
@@ -742,6 +807,8 @@ def main(run_at: datetime | None = None) -> int:
     deals = find_deals(cfg, offers, history, places, state, run_at)
 
     alerts_sent = send_alerts(cfg, deals, state, topic, page_url_from_env(cfg), run_at, errors)
+    out["saved_trips"] = match_saved_trips(cfg, offers)
+    alerts_sent += saved_trip_alerts(cfg, out["saved_trips"], state, topic, run_at, errors)
     prune_state(state, today)
 
     out["deals"] = deals

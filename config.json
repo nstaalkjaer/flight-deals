@@ -27,6 +27,12 @@
   "_exclude_countries": "Countries you never want to see (ISO codes). TR = Turkey.",
   "exclude_countries": ["TR"],
 
+  "_saved_trips": "Trips you're watching. They show at the top of the page on every device. alert = phone alert when a new cheapest matching price is seen today or yesterday.",
+  "saved_trips": [
+    {"name": "China, mid-January to mid-February", "countries": ["CN"],
+     "leave_from": "2027-01-11", "back_by": "2027-02-14", "min_days": 28, "max_days": 35, "alert": true}
+  ],
+
   "_regions": "price_limit = return price in DKK per person that always counts as a deal. min_days/max_days = trip length. europe=true puts the region in the separate Europe tab.",
   "regions": {
     "southeast_asia":   { "label": "Southeast Asia",          "price_limit": 3000, "min_days": 12, "max_days": 35 },

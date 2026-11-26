@@ -22,6 +22,8 @@ Trips outside Europe must be 12–35 days. Europe has its own tab with 3–21 da
 
 The **All prices** tab shows the cheapest price to every destination, deal or not, grouped by country. Tap a destination to see its price history and cheapest dates.
 
+**Saved trips** (in `config.json` under `saved_trips`) show at the top of the page on every device, with the cheapest matching prices. With `"alert": true` you get a phone alert when a new cheapest match is seen today or yesterday.
+
 The **Your trip** bar at the top filters everything by your dates, trip length and direct flights. Tap ☆ to make a country a favourite: favourites stay at the top, and "Favourites only" hides the rest. These settings are saved in your browser.
 
 Turkey is left out completely (`exclude_countries` in `config.json`). The UK, Norway, Iceland, Switzerland and the Balkans are in the Europe tab.

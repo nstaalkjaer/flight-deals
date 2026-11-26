@@ -125,6 +125,12 @@
   .dprice { grid-column: 2; grid-row: 1 / span 2; align-self: center; text-align: right; font-family: var(--mono); font-weight: 700; color: var(--amber); }
   .dprice small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
   .note { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+  .saved { display: grid; gap: 8px; padding: 12px 14px; margin-bottom: 14px; background: var(--panel); border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--line)); border-radius: var(--radius); }
+  .saved-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+  .saved-head .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--amber); }
+  .saved-head .when { font-size: 13px; color: var(--muted); }
+  .saved .note { margin: 0; }
+  .optlist b { white-space: nowrap; }
   .tripbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 10px 12px; margin-bottom: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
   .tripbar .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text); }
   input[type=date] { font: inherit; font-size: 13px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
@@ -178,6 +184,8 @@
   </header>
 
   <div id="banners"></div>
+
+  <div id="saved"></div>
 
   <section class="tripbar" aria-label="Your trip">
     <span class="lbl">Your trip</span>
@@ -385,7 +393,19 @@
 
     $("marketText").textContent = s.markets ? "Prices per market: " + Object.entries(s.markets).map(([m, n]) => `${mname(m)} ${n.toLocaleString("da-DK")}`).join(" · ") : "";
 
+    $("saved").innerHTML = (d.saved_trips || []).map(savedCard).join("");
+
     renderDeals();
+  }
+
+  function savedCard(t) {
+    const where = [t.leave_from && `leave from ${dmon(t.leave_from)}`, t.leave_by && `leave by ${dmon(t.leave_by)}`, t.back_by && `back by ${dmon(t.back_by)}`,
+      (t.min_days || t.max_days) && `${t.min_days || "?"}–${t.max_days || "?"} days`, t.max_price && `under ${kr(t.max_price)}`].filter(Boolean).join(" · ");
+    const rows = (t.matches || []).map((m) => `<a href="${esc(m.link)}" target="_blank" rel="noopener"><span>${esc(m.city)} · ${dmon(m.depart)} → ${dmon(m.return)} · ${m.days} d · ${stops(m.stops_out)} · seen ${ageText(m.age_days)}</span><b>${kr(m.price)}</b></a>`).join("");
+    return `<section class="saved" aria-label="Saved trip">
+      <div class="saved-head"><span class="lbl">★ Saved trip</span><b>${esc(t.name)}</b><span class="when">${esc(where)}</span></div>
+      ${rows ? `<div class="optlist">${rows}</div>` : `<p class="note">No matching prices yet. The scanner checks every 30 minutes${t.alert ? " and will send a phone alert when one shows up" : ""}.</p>`}
+    </section>`;
   }
 
   function renderDeals() {
@@ -396,6 +416,7 @@
     $("infoView").hidden = view !== "info";
     $("exploreView").hidden = view !== "explore";
     document.querySelector(".tripbar").hidden = view === "info";
+    $("saved").hidden = view === "info";
     document.querySelectorAll("nav.tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
     if (view === "info") return;
     if (view === "explore") return renderExplore();
